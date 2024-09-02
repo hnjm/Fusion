@@ -9,18 +9,35 @@ namespace ActualLab.Rpc.Serialization;
 
 public sealed class RpcByteArgumentSerializer(IByteSerializer serializer) : RpcArgumentSerializer
 {
+    public static int CopySizeThreshold { get; set; } = 1024;
+
     [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    public override TextOrBytes Serialize(ArgumentList arguments, bool allowPolymorphism)
+    public override TextOrBytes Serialize(ArgumentList arguments, bool allowPolymorphism, int sizeHint)
     {
         if (arguments.Length == 0)
             return TextOrBytes.EmptyBytes;
 
-        using var buffer = new ArrayPoolBuffer<byte>(256);
-        var itemSerializer = allowPolymorphism
-            ? (ItemSerializer)new ItemPolymorphicSerializer(serializer, buffer)
-            : new ItemNonPolymorphicSerializer(serializer, buffer);
-        arguments.Read(itemSerializer);
-        return new TextOrBytes(buffer.WrittenSpan.ToArray()); // That's why we retain the last buffer
+        var buffer = new ArrayPoolBuffer<byte>(128 + Math.Max(128, sizeHint));
+        try {
+            var itemSerializer = allowPolymorphism
+                ? (ItemSerializer)new ItemPolymorphicSerializer(serializer, buffer)
+                : new ItemNonPolymorphicSerializer(serializer, buffer);
+            arguments.Read(itemSerializer);
+
+            ReadOnlyMemory<byte> bytes;
+            var position = buffer.Position;
+            if (position < CopySizeThreshold || position < buffer.FreeCapacity) {
+                bytes = buffer.WrittenSpan.ToArray();
+                buffer.Dispose();
+            }
+            else
+                bytes = buffer.WrittenMemory;
+            return new TextOrBytes(bytes);
+        }
+        catch {
+            buffer.Dispose();
+            throw;
+        }
     }
 
     [RequiresUnreferencedCode(UnreferencedCode.Serialization)]

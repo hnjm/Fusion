@@ -9,12 +9,13 @@ using ActualLab.Fusion.Client.Interception;
 using ActualLab.Fusion.UI;
 using ActualLab.OS;
 using ActualLab.Rpc;
+using Blazored.LocalStorage;
 using Blazorise.Bootstrap5;
 using Blazorise.Icons.FontAwesome;
-using Templates.TodoApp.Abstractions;
-using Templates.TodoApp.UI.Services;
+using Samples.TodoApp.Abstractions;
+using Samples.TodoApp.UI.Services;
 
-namespace Templates.TodoApp.UI;
+namespace Samples.TodoApp.UI;
 
 #pragma warning disable IL2026
 
@@ -28,16 +29,29 @@ public static class StartupHelper
         builder.Logging.AddFilter(typeof(InMemoryRemoteComputedCache).Namespace, LogLevel.Information);
         builder.Logging.AddFilter(typeof(RpcHub).Namespace, LogLevel.Debug);
         builder.Logging.AddFilter(typeof(CommandHandlerResolver).Namespace, LogLevel.Debug);
+        builder.Logging.AddFilter(typeof(IRemoteComputedCache).Namespace, LogLevel.Debug);
+#if DEBUG // Log cache entry updates in debug mode to see if our serialization results are identical for the same output
+        RemoteComputeServiceInterceptor.Options.Default = new() {
+            LogCacheEntryUpdateSettings = (LogLevel.Warning, int.MaxValue),
+        };
+#endif
 
         // Fusion services
         var fusion = services.AddFusion();
-        fusion.AddInMemoryRemoteComputedCache(_ => new() { LogLevel = LogLevel.Information });
         fusion.AddAuthClient();
         fusion.AddBlazor().AddAuthentication().AddPresenceReporter();
 
         // RPC clients
         fusion.AddClient<ITodoService>();
         fusion.Rpc.AddClient<IRpcExampleService>();
+
+        // LocalStorageRemoteComputedCache as IRemoteComputedCache
+        services.AddBlazoredLocalStorageAsSingleton();
+        services.AddSingleton(_ => LocalStorageRemoteComputedCache.Options.Default);
+        services.AddSingleton(c => {
+            var options = c.GetRequiredService<LocalStorageRemoteComputedCache.Options>();
+            return (IRemoteComputedCache)new LocalStorageRemoteComputedCache(options, c);
+        });
 
         ConfigureSharedServices(services, HostKind.Client, builder.HostEnvironment.BaseAddress);
     }
@@ -68,8 +82,6 @@ public static class StartupHelper
             services.AddBlazorise(options => options.Immediate = true)
                 .AddBootstrap5Providers()
                 .AddFontAwesomeIcons();
-        }
-        else {
         }
 
         // Diagnostics

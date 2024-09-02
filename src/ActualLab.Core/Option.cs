@@ -1,8 +1,35 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using ActualLab.Conversion;
 using ActualLab.Internal;
 
 namespace ActualLab;
+
+/// <summary>
+/// Helper methods related to <see cref="Option{T}"/> type.
+/// </summary>
+public static class Option
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Option<T> None<T>() => default;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Option<T> Some<T>(T value) => new(true, value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Option<T> FromClass<T>(T? value)
+        where T : class
+        => ReferenceEquals(value, null)
+            ? default
+            : new Option<T>(true, value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Option<T> FromNullable<T>(T? value)
+        where T : struct
+        => value.HasValue
+            ? new Option<T>(true, value.GetValueOrDefault())
+            : default;
+}
 
 /// <summary>
 /// Describes an optional value ("option" or "maybe"-like type).
@@ -19,20 +46,32 @@ public interface IOption
     object? Value { get; }
 }
 
-[StructLayout(LayoutKind.Auto)]
+#pragma warning disable CA1036
+
+[StructLayout(LayoutKind.Sequential)] // Important! Pack = 0 -> Pack = Max(sizeof(bool), sizeof(Value))
 [DataContract, MemoryPackable(GenerateType.VersionTolerant)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
 [DebuggerDisplay("{" + nameof(DebugValue) + "}")]
-public readonly partial struct Option<T> : IEquatable<Option<T>>, IOption
+[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+[method: MethodImpl(MethodImplOptions.AggressiveInlining)]
+public readonly partial struct Option<T>(bool hasValue, T? valueOrDefault)
+    : IOption, ICanBeNone<Option<T>>, IEquatable<Option<T>>, IComparable<Option<T>>, IConvertibleTo<ApiOption<T>>
 {
+    /// <summary>
+    /// Returns an option of type <typeparamref name="T"/> with no value.
+    /// </summary>
+    public static Option<T> None => default;
+
     /// <inheritdoc />
     [DataMember(Order = 0), MemoryPackOrder(0)]
-    public bool HasValue { get; }
+    public bool HasValue { get; } = hasValue;
+
     /// <summary>
     /// Retrieves option's value. Returns <code>default(T)</code> in case option doesn't have one.
     /// </summary>
     [DataMember(Order = 1), MemoryPackOrder(1)]
-    public T? ValueOrDefault { get; }
+    public T? ValueOrDefault { get; } = valueOrDefault;
+
     /// <summary>
     /// Retrieves option's value. Throws <see cref="InvalidOperationException"/> in case option doesn't have one.
     /// </summary>
@@ -42,36 +81,17 @@ public readonly partial struct Option<T> : IEquatable<Option<T>>, IOption
         get { AssertHasValue(); return ValueOrDefault!; }
     }
 
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    public bool IsNone {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => !HasValue;
+    }
+
     /// <inheritdoc />
     // ReSharper disable once HeapView.BoxingAllocation
     object? IOption.Value => Value;
     [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
     private string DebugValue => ToString();
-
-    /// <summary>
-    /// Returns an option of type <typeparamref name="T"/> with no value.
-    /// </summary>
-    public static Option<T> None => default;
-    /// <summary>
-    /// Creates an option of type <typeparamref name="T"/> with the specified value.
-    /// </summary>
-    /// <param name="value">Option's value.</param>
-    /// <returns>A newly created option.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Option<T> Some(T value) => new(true, value);
-
-    /// <summary>
-    /// Constructor.
-    /// </summary>
-    /// <param name="hasValue"><see cref="HasValue"/> value.</param>
-    /// <param name="valueOrDefault"><see cref="ValueOrDefault"/> value.</param>
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Option(bool hasValue, T? valueOrDefault)
-    {
-        HasValue = hasValue;
-        ValueOrDefault = valueOrDefault;
-    }
 
     /// <inheritdoc />
     public override string ToString()
@@ -84,14 +104,6 @@ public readonly partial struct Option<T> : IEquatable<Option<T>>, IOption
         value = ValueOrDefault!;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Option<T>((bool HasValue, T Value) source)
-        => new(source.HasValue, source.Value);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator Option<T>(T source) => new(true, source);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static explicit operator T(Option<T> source) => source.Value;
-
     // Useful methods
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -102,32 +114,49 @@ public readonly partial struct Option<T> : IEquatable<Option<T>>, IOption
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsNone() => !HasValue;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Option<TCast?> CastAs<TCast>()
         where TCast : class
-        => HasValue ? Option<TCast?>.Some(ValueOrDefault as TCast) : default;
+        => HasValue ? new Option<TCast?>(true, ValueOrDefault as TCast) : default;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Option<TCast> Cast<TCast>()
     {
         if (!HasValue)
-            return Option.None<TCast>();
+            return default;
         if (ValueOrDefault is TCast value)
-            return Option.Some(value);
+            return new Option<TCast>(true, value);
         throw new InvalidCastException();
     }
+
+    public Option<T> ToApiOption() => new(HasValue, ValueOrDefault);
+    ApiOption<T> IConvertibleTo<ApiOption<T>>.Convert() => new(HasValue, ValueOrDefault);
 
     // Equality
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(Option<T> other)
-        => HasValue == other.HasValue
-            && EqualityComparer<T>.Default.Equals(ValueOrDefault!, other.ValueOrDefault!);
+        => HasValue
+            ? other.HasValue && EqualityComparer<T>.Default.Equals(ValueOrDefault!, other.ValueOrDefault!)
+            : !other.HasValue;
     public override bool Equals(object? obj)
         => obj is Option<T> other && Equals(other);
-    public override int GetHashCode() => HashCode.Combine(HasValue, ValueOrDefault!);
+    public override int GetHashCode()
+        => HasValue ? ValueOrDefault?.GetHashCode() ?? 0 : int.MinValue;
+
+    // Comparison
+
+    public int CompareTo(Option<T> other)
+        => HasValue
+            ? other.HasValue ? Comparer<T>.Default.Compare(ValueOrDefault, other.ValueOrDefault) : 1
+            : other.HasValue ? -1 : 0;
+
+    // Operators
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Option<T>(T source) => new(true, source);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static implicit operator Option<T>((bool HasValue, T Value) source) => new(source.HasValue, source.Value);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator ==(Option<T> left, Option<T> right) => left.Equals(right);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -141,51 +170,4 @@ public readonly partial struct Option<T> : IEquatable<Option<T>>, IOption
         if (!HasValue)
             throw Errors.OptionIsNone();
     }
-}
-
-/// <summary>
-/// Helper methods related to <see cref="Option{T}"/> type.
-/// </summary>
-public static class Option
-{
-    /// <summary>
-    /// Returns an option of type <typeparamref name="T"/> with no value.
-    /// </summary>
-    /// <typeparam name="T">Option type.</typeparam>
-    /// <returns>Option with no value.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Option<T> None<T>() => default;
-
-    /// <summary>
-    /// Creates an option of type <typeparamref name="T"/> with the specified value.
-    /// </summary>
-    /// <param name="value">Option's value.</param>
-    /// <typeparam name="T">Option type.</typeparam>
-    /// <returns>Option with the specified value.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Option<T> Some<T>(T value) => Option<T>.Some(value);
-
-    /// <summary>
-    /// Creates an option from the nullable reference.
-    /// Returns <see cref="None{T}"/> when <paramref name="value"/> is <code>null</code>.
-    /// </summary>
-    /// <param name="value">Option's value.</param>
-    /// <typeparam name="T">Option type.</typeparam>
-    /// <returns>An option with the specified value.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Option<T> FromClass<T>(T value)
-        where T : class?
-        => value != null ? Some(value) : default;
-
-    /// <summary>
-    /// Creates an option from the nullable struct.
-    /// Returns <see cref="None{T}"/> when <paramref name="value"/> is <code>null</code>.
-    /// </summary>
-    /// <param name="value">Option's value.</param>
-    /// <typeparam name="T">Option type.</typeparam>
-    /// <returns>An option with the specified value.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Option<T> FromStruct<T>(T? value)
-        where T : struct
-        => value.HasValue ? Some(value.GetValueOrDefault()) : default;
 }

@@ -11,39 +11,47 @@ public sealed class ArrayPoolBuffer<T>(ArrayPool<T> pool, int initialCapacity) :
     private const int DefaultInitialCapacity = 256;
 
     private T[] _array = pool.Rent(RoundCapacity(initialCapacity));
-    private int _index;
+    private int _position;
+
+    public bool MustClear { get; init; }
+#if !NETSTANDARD2_0
+        = RuntimeHelpers.IsReferenceOrContainsReferences<T>();
+#else
+        = true; // Not sure what's a better way to do this
+#endif
+    public T[] Array => _array;
 
     /// <inheritdoc/>
     Memory<T> IMemoryOwner<T>.Memory => MemoryMarshal.AsMemory(WrittenMemory);
 
-    public int Index {
+    public int Position {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _index;
+        get => _position;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set {
             if (value < 0 || value > _array.Length)
                 throw new ArgumentOutOfRangeException(nameof(value));
 
-            _index = value;
+            _position = value;
         }
     }
 
     /// <inheritdoc/>
     public ReadOnlyMemory<T> WrittenMemory {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _array.AsMemory(0, _index);
+        get => _array.AsMemory(0, _position);
     }
 
     /// <inheritdoc/>
     public ReadOnlySpan<T> WrittenSpan {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _array.AsSpan(0, _index);
+        get => _array.AsSpan(0, _position);
     }
 
     /// <inheritdoc/>
     public int WrittenCount {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _index;
+        get => _position;
     }
 
     /// <inheritdoc/>
@@ -55,7 +63,7 @@ public sealed class ArrayPoolBuffer<T>(ArrayPool<T> pool, int initialCapacity) :
     /// <inheritdoc/>
     public int FreeCapacity {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _array.Length - _index;
+        get => _array.Length - _position;
     }
 
     public ArrayPoolBuffer()
@@ -73,65 +81,64 @@ public sealed class ArrayPoolBuffer<T>(ArrayPool<T> pool, int initialCapacity) :
     /// <inheritdoc/>
     public void Dispose()
     {
-        var array = Interlocked.Exchange(ref _array, null!);
-        if (array != null)
-            pool.Return(array);
+        if (Interlocked.Exchange(ref _array, null!) is { } array)
+            pool.Return(array, MustClear);
     }
 
     /// <inheritdoc/>
     [Pure]
     public override string ToString()
         => _array is char[] chars
-            ? new string(chars, 0, _index) // See comments in MemoryOwner<T> about this
-            : $"{GetType().GetName()}[{_index}]"; // Same representation used in Span<T>
+            ? new string(chars, 0, _position) // See comments in MemoryOwner<T> about this
+            : $"{GetType().GetName()}[{_position}]"; // Same representation used in Span<T>
 
     /// <inheritdoc/>
     public Memory<T> GetMemory(int sizeHint = 0)
     {
         EnsureCapacity(sizeHint);
-        return _array.AsMemory(_index);
+        return _array.AsMemory(_position);
     }
 
     /// <inheritdoc/>
     public Span<T> GetSpan(int sizeHint = 0)
     {
         EnsureCapacity(sizeHint);
-        return _array.AsSpan(_index);
+        return _array.AsSpan(_position);
     }
 
     /// <inheritdoc/>
     public void Advance(int count)
     {
-        if (count < 0 || _index + count > _array.Length)
+        if (count < 0 || _position + count > _array.Length)
             throw new ArgumentOutOfRangeException(nameof(count));
 
-        _index += count;
+        _position += count;
     }
 
     /// <inheritdoc/>
     public void Clear()
-        => _array.AsSpan(0, _index).Clear();
+        => _array.AsSpan(0, _position).Clear();
 
     public void Reset()
-        => _index = 0;
+        => _position = 0;
 
     public void Reset(int capacity)
     {
-        _index = 0;
+        _position = 0;
         ReplaceBuffer(capacity);
     }
 
-    public void Reset(int capacity, int retainedCapacity)
+    public void Reset(int capacity, int maxCapacity)
     {
-        _index = 0;
-        if (_array.Length > retainedCapacity)
+        _position = 0;
+        if (_array.Length > maxCapacity)
             ReplaceBuffer(capacity);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void EnsureCapacity(int sizeHint = 0)
     {
-        var capacity = _index + Math.Max(1, sizeHint);
+        var capacity = _position + Math.Max(1, sizeHint);
         if (capacity > _array.Length)
             ResizeBuffer(capacity);
     }
@@ -151,7 +158,7 @@ public sealed class ArrayPoolBuffer<T>(ArrayPool<T> pool, int initialCapacity) :
     private void ReplaceBuffer(int capacity)
     {
         capacity = RoundCapacity(capacity);
-        pool.Return(_array);
+        pool.Return(_array, MustClear);
         _array = pool.Rent(capacity);
     }
 

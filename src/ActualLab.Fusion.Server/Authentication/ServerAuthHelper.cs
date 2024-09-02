@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using ActualLab.Fusion.Authentication;
-using ActualLab.Fusion.EntityFramework;
 using ActualLab.Fusion.Server.Internal;
 
 namespace ActualLab.Fusion.Server.Authentication;
@@ -204,11 +203,13 @@ public class ServerAuthHelper : IHasServices
         User? user, ClaimsPrincipal httpUser, string schema)
     {
         var httpUserIdentityName = httpUser.Identity?.Name ?? "";
-        var claims = httpUser.Claims.ToImmutableDictionary(c => c.Type, c => c.Value);
+        var claims = httpUser.Claims.ToApiMap(c => c.Type, c => c.Value, StringComparer.Ordinal);
         var id = FirstClaimOrDefault(claims, Settings.IdClaimKeys) ?? httpUserIdentityName;
         var name = FirstClaimOrDefault(claims, Settings.NameClaimKeys) ?? httpUserIdentityName;
         var identity = new UserIdentity(schema, id);
-        var identities = ImmutableDictionary<UserIdentity, string>.Empty.Add(identity, "");
+        var identities = new ApiMap<UserIdentity, string>() {
+            { identity, "" },
+        };
 
         if (user == null)
             // Create
@@ -219,7 +220,7 @@ public class ServerAuthHelper : IHasServices
         else {
             // Update
             user = user with {
-                Claims = claims.SetItems(user.Claims),
+                Claims = claims.With(user.Claims),
                 Identities = identities,
             };
         }

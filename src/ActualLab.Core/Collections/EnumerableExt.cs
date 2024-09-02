@@ -20,6 +20,25 @@ public static class EnumerableExt
         return result;
     }
 
+    public static T[] ToArray<T>(this IEnumerable<T> source, int length)
+    {
+        var result = new T[length];
+        var i = 0;
+        foreach (var item in source)
+            result[i++] = item;
+        return result;
+    }
+
+    public static TTarget[] ToArray<TSource, TTarget>(
+        this IEnumerable<TSource> source, int length, Func<TSource, TTarget> selector)
+    {
+        var result = new TTarget[length];
+        var i = 0;
+        foreach (var item in source)
+            result[i++] = selector.Invoke(item);
+        return result;
+    }
+
     // SkipNullItems
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -31,6 +50,8 @@ public static class EnumerableExt
     public static IEnumerable<T> SkipNullItems<T>(this IEnumerable<T?> source)
         where T : struct
         => source.Where(x => x != null).Select(x => x!.Value);
+
+    // SuppressExceptions
 
     public static IEnumerable<T> SuppressExceptions<T>(this IEnumerable<T> source)
     {

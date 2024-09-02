@@ -27,17 +27,17 @@ public partial record User : IHasId<Symbol>, IHasVersion<long>, IRequirementTarg
     [DataMember, MemoryPackOrder(2)]
     public long Version { get; init; }
     [DataMember, MemoryPackOrder(3)]
-    public ImmutableDictionary<string, string> Claims { get; init; }
+    public ApiMap<string, string> Claims { get; init; }
     [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
-    public ImmutableDictionary<UserIdentity, string> Identities { get; init; }
+    public ApiMap<UserIdentity, string> Identities { get; init; }
 
     // Computed properties
 
     [DataMember(Name = nameof(Identities)), MemoryPackOrder(4)]
     [JsonPropertyName(nameof(Identities)),  Newtonsoft.Json.JsonProperty(nameof(Identities))]
-    public Dictionary<string, string> JsonCompatibleIdentities {
-        get => Identities.ToDictionary(p => p.Key.Id.Value, p => p.Value, StringComparer.Ordinal);
-        init => Identities = value.ToImmutableDictionary(p => new UserIdentity(p.Key), p => p.Value);
+    public ApiMap<string, string> JsonCompatibleIdentities {
+        get => Identities.UnorderedItems.ToApiMap(p => p.Key.Id.Value, p => p.Value, StringComparer.Ordinal);
+        init => Identities = value.ToApiMap(p => new UserIdentity(p.Key), p => p.Value);
     }
 
     public static User NewGuest(string? name = null)
@@ -48,8 +48,8 @@ public partial record User : IHasId<Symbol>, IHasVersion<long>, IRequirementTarg
     {
         Id = id;
         Name = name;
-        Claims = ImmutableDictionary<string, string>.Empty;
-        Identities = ImmutableDictionary<UserIdentity, string>.Empty;
+        Claims = ApiMap<string, string>.Empty;
+        Identities = ApiMap<UserIdentity, string>.Empty;
     }
 
     [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
@@ -57,14 +57,14 @@ public partial record User : IHasId<Symbol>, IHasVersion<long>, IRequirementTarg
         Symbol id,
         string name,
         long version,
-        ImmutableDictionary<string, string> claims,
-        Dictionary<string, string> jsonCompatibleIdentities)
+        ApiMap<string, string> claims,
+        ApiMap<string, string> jsonCompatibleIdentities)
     {
         Id = id;
         Name = name;
         Version = version;
         Claims = claims;
-        Identities = ImmutableDictionary<UserIdentity, string>.Empty;
+        Identities = ApiMap<UserIdentity, string>.Empty;
         JsonCompatibleIdentities = jsonCompatibleIdentities;
     }
 
@@ -81,9 +81,9 @@ public partial record User : IHasId<Symbol>, IHasVersion<long>, IRequirementTarg
     }
 
     public User WithClaim(string name, string value)
-        => this with { Claims = Claims.SetItem(name, value) };
+        => this with { Claims = Claims.With(name, value) };
     public User WithIdentity(UserIdentity identity, string secret = "")
-        => this with { Identities = Identities.SetItem(identity, secret) };
+        => this with { Identities = Identities.With(identity, secret) };
 
     public bool IsAuthenticated()
         => !Id.IsEmpty;
@@ -96,9 +96,10 @@ public partial record User : IHasId<Symbol>, IHasVersion<long>, IRequirementTarg
     {
         if (Identities.IsEmpty)
             return this;
-        var maskedIdentities = ImmutableDictionary<UserIdentity, string>.Empty;
+
+        var maskedIdentities = ApiMap<UserIdentity, string>.Empty;
         foreach (var (id, _) in Identities)
-            maskedIdentities = maskedIdentities.Add((id.Schema, "<hidden>"), "");
+            maskedIdentities.TryAdd((id.Schema, "<hidden>"), "");
         return this with { Identities = maskedIdentities };
     }
 

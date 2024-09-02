@@ -1,5 +1,4 @@
 using System.Data;
-using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using ActualLab.DependencyInjection;
@@ -9,12 +8,8 @@ using Microsoft.Extensions.Configuration.Memory;
 using ActualLab.Fusion.EntityFramework;
 using ActualLab.Fusion.EntityFramework.Npgsql;
 using ActualLab.Fusion.EntityFramework.Operations;
-using ActualLab.Fusion.EntityFramework.Redis;
-using ActualLab.Fusion.Extensions;
 using ActualLab.Fusion.Server;
-using ActualLab.Fusion.Server.Middlewares;
 using ActualLab.Interception;
-using ActualLab.Interception.Interceptors;
 using ActualLab.IO;
 using ActualLab.OS;
 using ActualLab.Rpc;
@@ -22,16 +17,15 @@ using ActualLab.Rpc.Server;
 using ActualLab.Rpc.Testing;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
-using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
-using Templates.TodoApp;
-using Templates.TodoApp.Abstractions;
-using Templates.TodoApp.Host;
-using Templates.TodoApp.Services;
-using Templates.TodoApp.Services.Db;
-using Templates.TodoApp.UI;
+using Samples.TodoApp;
+using Samples.TodoApp.Abstractions;
+using Samples.TodoApp.Host;
+using Samples.TodoApp.Services;
+using Samples.TodoApp.Services.Db;
+using Samples.TodoApp.UI;
 
 // Constrain thread pool to 1 thread to debug possible issues with async logic
 // ThreadPool.SetMinThreads(1, 1);
@@ -257,7 +251,7 @@ void ConfigureShardDbContext(IServiceProvider services, DbShard shard, DbContext
     }
     else {
         var appTempDir = FilePath.GetApplicationTempDirectory("", true);
-        var dbPath = (appTempDir & "App_{0:StorageId}.db").Value.Interpolate(shard);
+        var dbPath = (appTempDir & "TodoApp_v1_{0:StorageId}.db").Value.Interpolate(shard);
         db.UseSqlite($"Data Source={dbPath}");
     }
     if (env.IsDevelopment())

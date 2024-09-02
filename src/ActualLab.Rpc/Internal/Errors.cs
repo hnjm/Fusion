@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using ActualLab.Rpc.Infrastructure;
 
 namespace ActualLab.Rpc.Internal;
@@ -57,6 +58,8 @@ public static class Errors
     public static Exception CannotDeserializeUnexpectedPolymorphicArgumentType(Type expectedType, Type actualType)
         => new SerializationException($"Cannot deserialize polymorphic argument type: " +
             $"expected '{expectedType.GetName()}' or its descendant, got '{actualType.GetName()}'.");
+    public static Exception InvalidSerializedDataFormat()
+        => new SerializationException("Invalid serialized data format.");
 
     public static Exception ConnectTimeout(RpcPeerRef peerRef, TimeSpan? timeout = null)
         => ConnectTimeout(peerRef.GetRemotePartyName());
@@ -100,8 +103,8 @@ public static class Errors
     public static Exception RpcStreamInvalidPosition()
         => new InvalidOperationException("RpcStream position is invalid.");
 
-    public static Exception UnsupportedWebSocketMessageKind()
-        => new KeyNotFoundException("Unsupported WebSocket message kind.");
+    public static Exception InvalidWebSocketMessageType(WebSocketMessageType type, WebSocketMessageType expectedType)
+        => new InvalidOperationException($"Invalid WebSocket message type: got {type:G}, but expected {expectedType:G}.");
 
     public static Exception NoLocalCallInvoker()
         => new InvalidOperationException(
