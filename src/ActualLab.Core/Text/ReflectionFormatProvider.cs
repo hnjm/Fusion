@@ -1,13 +1,24 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using ActualLab.Internal;
 
 namespace ActualLab.Text;
 
-public sealed class ReflectionFormatProvider : IFormatProvider, ICustomFormatter {
+public sealed class ReflectionFormatProvider : IFormatProvider, ICustomFormatter
+{
     private static readonly char[] Separator = { ':' };
+
+    public static ReflectionFormatProvider Instance {
+        [RequiresUnreferencedCode(UnreferencedCode.Reflection)] get;
+    } = new();
+
+    private ReflectionFormatProvider()
+    { }
 
     public object? GetFormat(Type? formatType)
         => formatType == typeof(ICustomFormatter) ? this : null;
 
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "We assume server-side code is fully preserved")]
     public string Format(string? format, object? arg, IFormatProvider? formatProvider) {
         var formats = (format ?? string.Empty).Split(Separator, 2);
         var propertyName = formats[0].TrimEnd('}');

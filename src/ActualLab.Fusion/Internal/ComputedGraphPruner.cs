@@ -1,5 +1,3 @@
-using System.Diagnostics.Metrics;
-
 namespace ActualLab.Fusion.Internal;
 
 public sealed class ComputedGraphPruner : WorkerBase
@@ -15,17 +13,16 @@ public sealed class ComputedGraphPruner : WorkerBase
         public RandomTimeSpan InterBatchDelay { get; init; } = TimeSpan.FromSeconds(0.1).ToRandom(0.25);
         public RetryDelaySeq RetryDelays { get; init; } = RetryDelaySeq.Exp(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
         public TimeSpan DisposedComputedInvalidationDelay { get; init; } = TimeSpan.FromSeconds(5);
-        public Meter? Meter { get; init; } = null;
     }
 
     internal static readonly ComputedRegistry.MeterSet Metrics = ComputedRegistry.Metrics;
-    private readonly TaskCompletionSource<Unit> _whenActivatedSource;
+    private readonly AsyncTaskMethodBuilder _whenActivatedSource = AsyncTaskMethodBuilderExt.New();
 
     public Options Settings { get; init; }
     public MomentClock Clock { get; init; }
     public ILogger Log { get; init; }
 
-    public Task<Unit> WhenActivated => _whenActivatedSource.Task;
+    public Task WhenActivated => _whenActivatedSource.Task;
 
     public ComputedGraphPruner(Options settings, ILogger<ComputedGraphPruner>? log = null)
         : this(settings, MomentClockSet.Default, log) { }
@@ -35,8 +32,7 @@ public sealed class ComputedGraphPruner : WorkerBase
     {
         Settings = settings;
         Clock = clocks.CpuClock;
-        Log = log ?? NullLogger<ComputedGraphPruner>.Instance;
-        _whenActivatedSource = TaskCompletionSourceExt.New<Unit>();
+        Log = log ?? StaticLog.For(GetType());
 
         if (settings.AutoActivate)
             this.Start();
@@ -53,18 +49,20 @@ public sealed class ComputedGraphPruner : WorkerBase
         if (Settings.AutoActivate) {
             // This prevents race condition when two pruners are assigned at almost
             // the same time - they'll both may end up activate themselves here
-            var oldGraphPruner = computedRegistry.GraphPruner;
-            while (oldGraphPruner != this) {
-                await oldGraphPruner.WhenActivated.ConfigureAwait(false);
-                oldGraphPruner = computedRegistry.ChangeGraphPruner(this, oldGraphPruner);
+            var prevGraphPruner = computedRegistry.GraphPruner;
+            while (prevGraphPruner != this) {
+                if (prevGraphPruner != null)
+                    await prevGraphPruner.WhenActivated.ConfigureAwait(false);
+                prevGraphPruner = computedRegistry.ChangeGraphPruner(this, prevGraphPruner);
             }
         }
         else if (computedRegistry.GraphPruner != this) {
             Log.LogWarning("Terminating: ComputedRegistry.Instance.GraphPruner != this");
             return;
         }
-        _whenActivatedSource.TrySetResult(default);
+        _whenActivatedSource.TrySetResult();
 
+        await Clock.Delay(Settings.CheckPeriod.Next(), cancellationToken).ConfigureAwait(false);
         var chain = CreatePruneOnceChain()
             .AppendDelay(Settings.CheckPeriod, Clock)
             .RetryForever(Settings.RetryDelays, Clock)

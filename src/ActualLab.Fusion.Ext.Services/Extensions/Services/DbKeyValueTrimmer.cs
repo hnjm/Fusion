@@ -1,10 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Fusion.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using ActualLab.Fusion.EntityFramework;
 
 namespace ActualLab.Fusion.Extensions.Services;
 
-public class DbKeyValueTrimmer<TDbContext, TDbKeyValue> : DbShardWorkerBase<TDbContext>
+public class DbKeyValueTrimmer<TDbContext,
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TDbKeyValue> : DbShardWorkerBase<TDbContext>
     where TDbContext : DbContext
     where TDbKeyValue : DbKeyValue, new()
 {
@@ -31,7 +33,7 @@ public class DbKeyValueTrimmer<TDbContext, TDbKeyValue> : DbShardWorkerBase<TDbC
         KeyValueStore = services.GetRequiredService<IKeyValueStore>();
     }
 
-    protected override Task OnRun(DbShard shard, CancellationToken cancellationToken)
+    protected override Task OnRun(string shard, CancellationToken cancellationToken)
     {
         var lastTrimCount = 0;
 
@@ -46,8 +48,8 @@ public class DbKeyValueTrimmer<TDbContext, TDbKeyValue> : DbShardWorkerBase<TDbC
             var keys = await dbContext.Set<TDbKeyValue>().AsQueryable()
                 .Where(o => o.ExpiresAt < minExpiresAt)
                 .OrderBy(o => o.ExpiresAt)
-                .Select(o => o.Key)
                 .Take(Settings.BatchSize)
+                .Select(o => o.Key)
                 .ToArrayAsync(cancellationToken1).ConfigureAwait(false);
             if (keys.Length == 0)
                 return;
@@ -59,7 +61,7 @@ public class DbKeyValueTrimmer<TDbContext, TDbKeyValue> : DbShardWorkerBase<TDbC
 
             if (lastTrimCount > 0 && IsLoggingEnabled)
                 Log.Log(Settings.LogLevel,
-                    "Trim({Shard}) trimmed {Count} entries", shard.Value, lastTrimCount);
+                    "Trim({Shard}) trimmed {Count} entries", shard, lastTrimCount);
             // ReSharper disable once ExplicitCallerInfoArgument
         }).Trace(() => activitySource.StartActivity(GetType(), "Trim").AddShardTags(shard), Log);
 

@@ -2,10 +2,10 @@ namespace ActualLab.Fusion.Blazor;
 
 public abstract class ComputedRenderStateComponent<TState> : ComputedStateComponent<TState>
 {
-    private StateSnapshot<TState>? _renderState;
+    private StateSnapshot? _renderState;
 
-    protected StateSnapshot<TState> RenderState {
-        get => _renderState ??= State.Snapshot;
+    protected StateSnapshot RenderState {
+        get => _renderState ??= UntypedState.Snapshot;
         set => _renderState = value;
     }
 
@@ -19,13 +19,13 @@ public abstract class ComputedRenderStateComponent<TState> : ComputedStateCompon
             return true;
 
         // Inconsistent state is rare, so we make this check at last
-        return (Options & ComputedStateComponentOptions.ShouldRenderInconsistentState) != 0;
+        return (Options & ComputedStateComponentOptions.RenderInconsistentState) != 0;
     }
 
     protected bool IsRenderStateChanged()
-        => IsRenderStateChanged(State.Snapshot);
+        => IsRenderStateChanged(UntypedState.Snapshot);
 
-    protected bool IsRenderStateChanged(StateSnapshot<TState> renderState)
+    protected bool IsRenderStateChanged(StateSnapshot renderState)
     {
         if (ReferenceEquals(_renderState, renderState))
             return false;

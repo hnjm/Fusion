@@ -30,9 +30,26 @@ public class RpcWebSocketTest : RpcTestBase
         }
     }
 
-    [Fact]
-    public async Task BasicTest()
+    [Theory]
+    [InlineData("json3")]
+    [InlineData("njson3")]
+    [InlineData("mempack1")]
+    [InlineData("mempack2")]
+    [InlineData("mempack2-np")]
+    [InlineData("mempack2c")]
+    [InlineData("mempack2c-np")]
+    [InlineData("mempack3")]
+    [InlineData("mempack3c")]
+    [InlineData("msgpack1")]
+    [InlineData("msgpack2")]
+    [InlineData("msgpack2-np")]
+    [InlineData("msgpack2c")]
+    [InlineData("msgpack2c-np")]
+    [InlineData("msgpack3")]
+    [InlineData("msgpack3c")]
+    public async Task BasicTest(string serializationFormat)
     {
+        SerializationFormat = serializationFormat;
         await using var _ = await WebHost.Serve();
         var services = ClientServices;
         var client = services.GetRequiredService<ITestRpcServiceClient>();
@@ -136,9 +153,22 @@ public class RpcWebSocketTest : RpcTestBase
         }
     }
 
-    [Fact]
-    public async Task PolymorphTest()
+    [Theory]
+    [InlineData("json3")]
+    [InlineData("njson3")]
+    [InlineData("mempack1")]
+    [InlineData("mempack2")]
+    [InlineData("mempack2c")]
+    [InlineData("mempack3")]
+    [InlineData("mempack3c")]
+    [InlineData("msgpack1")]
+    [InlineData("msgpack2")]
+    [InlineData("msgpack2c")]
+    [InlineData("msgpack3")]
+    [InlineData("msgpack3c")]
+    public async Task PolymorphTest(string serializationFormat)
     {
+        SerializationFormat = serializationFormat;
         await using var _ = await WebHost.Serve();
         var services = ClientServices;
         var client = ClientServices.GetRequiredService<ITestRpcServiceClient>();
@@ -151,10 +181,8 @@ public class RpcWebSocketTest : RpcTestBase
         t1.Should().Be(t);
         t1.Should().NotBeSameAs(t);
 
-        await Assert.ThrowsAnyAsync<Exception>(
-            async () => await client.PolymorphArg(new Tuple<int>(1)));
-        await Assert.ThrowsAnyAsync<Exception>(
-            async () => await client.PolymorphResult(2));
+        (await client.PolymorphArg(new Tuple<int>(1))).Should().Be(1);
+        (await client.PolymorphResult(2)).Should().Be(new Tuple<int>(2));
 
         await AssertNoCalls(clientPeer, Out);
         await AssertNoCalls(backendClientPeer, Out);
@@ -182,9 +210,26 @@ public class RpcWebSocketTest : RpcTestBase
         await AssertNoCalls(peer, Out);
     }
 
-    [Fact]
-    public async Task StreamTest()
+    [Theory]
+    [InlineData("json3")]
+    [InlineData("njson3")]
+    [InlineData("mempack1")]
+    [InlineData("mempack2")]
+    [InlineData("mempack2-np")]
+    [InlineData("mempack2c")]
+    [InlineData("mempack2c-np")]
+    [InlineData("mempack3")]
+    [InlineData("mempack3c")]
+    [InlineData("msgpack1")]
+    [InlineData("msgpack2")]
+    [InlineData("msgpack2-np")]
+    [InlineData("msgpack2c")]
+    [InlineData("msgpack2c-np")]
+    [InlineData("msgpack3")]
+    [InlineData("msgpack3c")]
+    public async Task StreamTest(string serializationFormat)
     {
+        SerializationFormat = serializationFormat;
         await using var _ = await WebHost.Serve();
         var services = ClientServices;
         var peer = services.RpcHub().GetClientPeer(ClientPeerRef);
@@ -194,6 +239,8 @@ public class RpcWebSocketTest : RpcTestBase
         var stream1 = await client.StreamInt32(expected1.Count);
         (await stream1.ToListAsync()).Should().Equal(expected1);
         await AssertNoCalls(peer, Out);
+        if (SerializationFormat.EndsWith("-np"))
+            return;
 
         var expected2 = Enumerable.Range(0, 500)
             .Select(x => (x & 2) == 0 ? (ITuple)new Tuple<int>(x) : new Tuple<long>(x))
@@ -215,16 +262,37 @@ public class RpcWebSocketTest : RpcTestBase
         await AssertNoCalls(peer, Out);
     }
 
-    [Fact]
-    public async Task StreamInputTest()
+    [Theory]
+    [InlineData("json3")]
+    [InlineData("njson3")]
+    [InlineData("mempack1")]
+    [InlineData("mempack2")]
+    [InlineData("mempack2-np")]
+    [InlineData("mempack2c")]
+    [InlineData("mempack2c-np")]
+    [InlineData("mempack3")]
+    [InlineData("mempack3c")]
+    [InlineData("msgpack1")]
+    [InlineData("msgpack2")]
+    [InlineData("msgpack2-np")]
+    [InlineData("msgpack2c")]
+    [InlineData("msgpack2c-np")]
+    [InlineData("msgpack3")]
+    [InlineData("msgpack3c")]
+    public async Task StreamInputTest(string serializationFormat)
     {
+        SerializationFormat = serializationFormat;
         await using var _ = await WebHost.Serve();
         var services = ClientServices;
         var peer = services.RpcHub().GetClientPeer(ClientPeerRef);
         var client = services.GetRequiredService<ITestRpcServiceClient>();
 
-        var expected1 = AsyncEnumerable.Range(0, 500);
-        (await client.Count(RpcStream.New(expected1))).Should().Be(500);
+        using var cts = new CancellationTokenSource();
+        for (var length = 0; length < 100; length++) {
+            var seq = Enumerable.Range(0, length);
+            var count = await client.Count(RpcStream.New(seq), cts.Token);
+            count.Should().Be(length);
+        }
     }
 
     [Fact]
@@ -286,12 +354,27 @@ public class RpcWebSocketTest : RpcTestBase
     }
 
     [Theory]
-    [InlineData(100)]
-    [InlineData(1000)]
-    [InlineData(50_000)]
-    public async Task PerformanceTest(int iterationCount)
+    [InlineData(50_000, "json3")]
+    [InlineData(50_000, "njson3")]
+    [InlineData(50_000, "mempack1")]
+    [InlineData(50_000, "mempack2")]
+    [InlineData(50_000, "mempack2-np")]
+    [InlineData(50_000, "mempack2c")]
+    [InlineData(50_000, "mempack3")]
+    [InlineData(50_000, "msgpack1")]
+    [InlineData(50_000, "msgpack2")]
+    [InlineData(50_000, "msgpack2-np")]
+    [InlineData(50_000, "msgpack2c")]
+    [InlineData(50_000, "msgpack3")]
+    // Fastest options
+    [InlineData(200_000, "mempack2c-np")]
+    [InlineData(200_000, "msgpack2c-np")]
+    [InlineData(200_000, "mempack3c")]
+    [InlineData(200_000, "msgpack3c")]
+    public async Task PerformanceTest(int iterationCount, string serializationFormat)
     {
-        // ByteSerializer.Default = MessagePackByteSerializer.Default;
+        SerializationFormat = serializationFormat;
+        RpcFrameDelayerFactory = null;
         if (TestRunnerInfo.IsBuildAgent())
             iterationCount = 100;
 
@@ -300,28 +383,26 @@ public class RpcWebSocketTest : RpcTestBase
         var peer = services.RpcHub().GetClientPeer(ClientPeerRef);
         var client = services.GetRequiredService<ITestRpcServiceClient>();
 
-        var threadCount = Math.Max(1, HardwareInfo.ProcessorCount / 4);
+        var threadCount = Math.Max(1, HardwareInfo.ProcessorCount / 2);
         var tasks = new Task[threadCount];
-        await Run(10); // Warmup
-        var elapsed = await Run(iterationCount);
+        await Run(100); // Warmup
 
+        Out.WriteLine($"{iterationCount} iterations x {threadCount} threads:");
+        var elapsed = await Run(iterationCount);
         var totalIterationCount = threadCount * iterationCount;
-        Out.WriteLine($"{iterationCount}: {totalIterationCount / elapsed.TotalSeconds:F} ops/s using {threadCount} threads");
+        Out.WriteLine($"{totalIterationCount / elapsed.TotalSeconds:F} ops/s using {threadCount} threads");
+
         await AssertNoCalls(peer, Out);
 
-        async Task<TimeSpan> Run(int count)
-        {
+        async Task<TimeSpan> Run(int count) {
             var startedAt = CpuTimestamp.Now;
             for (var threadIndex = 0; threadIndex < threadCount; threadIndex++) {
-                tasks[threadIndex] = Task.Run(() =>
-                    Enumerable
-                        .Range(0, count)
-                        .Select(async i => {
-                            if (i != await client.Div(i, 1).ConfigureAwait(false))
-                                Assert.Fail("Wrong result.");
-                        })
-                        .Collect(256),
-                    CancellationToken.None);
+                tasks[threadIndex] = Task.Run(async () => {
+                    for (var i = 0; i < count; i++) {
+                        if (i != await client.Div(i, 1).ConfigureAwait(false))
+                            Assert.Fail("Wrong result.");
+                    }
+                }, CancellationToken.None);
             }
 
             await Task.WhenAll(tasks);

@@ -1,11 +1,11 @@
 using System.Runtime.Serialization;
 using ActualLab.Mathematics;
 using MemoryPack;
-using Microsoft.Toolkit.HighPerformance;
+using MessagePack;
 
 namespace Samples.MeshRpc;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable, MessagePackObject(true)]
 public readonly partial record struct ShardRef(
     [property: DataMember(Order = 0), MemoryPackOrder(0)] int Key)
 {
@@ -14,7 +14,6 @@ public readonly partial record struct ShardRef(
     public static ShardRef New(object? source)
         => source switch {
             null => default,
-            Symbol s => New(s),
             string s => New(s),
             _ => New(source.GetHashCode()),
         };
@@ -22,11 +21,8 @@ public readonly partial record struct ShardRef(
     public static ShardRef New(int hash)
         => new(hash.PositiveModulo(ShardCount));
 
-    public static ShardRef New(Symbol value)
-        => New(value.Value.GetDjb2HashCode().PositiveModulo(ShardCount));
-
     public static ShardRef New(string value)
-        => New(value.GetDjb2HashCode().PositiveModulo(ShardCount));
+        => New(value.GetXxHash3().PositiveModulo(ShardCount));
 
     public override string ToString()
         => $"shard:{Key}";

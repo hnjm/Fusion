@@ -1,25 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.Collections.Internal;
+using MessagePack;
 
 namespace ActualLab.Collections;
-
-public interface IReadOnlyPropertyBag
-{
-    int Count { get; }
-    IReadOnlyList<PropertyBagItem> Items { get; }
-    object? this[Symbol key] { get; }
-
-    bool Contains<T>();
-    bool Contains(Symbol key);
-    bool TryGet<T>([MaybeNullWhen(false)] out T value);
-    bool TryGet<T>(Symbol key, [MaybeNullWhen(false)] out T value);
-    T? Get<T>() where T : class;
-    T? Get<T>(Symbol key) where T : class;
-    T GetOrDefault<T>();
-    T GetOrDefault<T>(Symbol key);
-    T GetOrDefault<T>(T @default);
-    T GetOrDefault<T>(Symbol key, T @default);
-}
 
 #pragma warning disable CS0618 // Type or member is obsolete
 
@@ -27,9 +10,9 @@ public interface IReadOnlyPropertyBag
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
 #endif
 [StructLayout(LayoutKind.Auto)]
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
-public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<PropertyBag>
+public readonly partial struct PropertyBag : IEquatable<PropertyBag>
 {
     public static readonly PropertyBag Empty;
 
@@ -37,7 +20,7 @@ public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<Pr
 
     // MessagePack requires this member to be public
     [Obsolete("This member exists solely to make serialization work. Don't use it!")]
-    [DataMember(Order = 0), MemoryPackOrder(0), MemoryPackInclude, JsonInclude, Newtonsoft.Json.JsonProperty]
+    [DataMember(Order = 0), MemoryPackOrder(0), Key(0), MemoryPackInclude, JsonInclude, Newtonsoft.Json.JsonProperty]
     public PropertyBagItem[]? RawItems {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _items;
@@ -46,21 +29,21 @@ public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<Pr
 
     // Computed properties
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public int Count {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _items?.Length ?? 0;
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public IReadOnlyList<PropertyBagItem> Items {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _items ?? [];
     }
 
-    public object? this[Symbol key] {
+    public object? this[string key] {
         get {
-            if (_items == null || key.IsEmpty)
+            if (_items == null || key.IsNullOrEmpty())
                 return null;
 
             var index = Array.IndexOf(_items, PropertyBagItem.NewKey(key));
@@ -68,10 +51,15 @@ public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<Pr
         }
     }
 
+    public object? this[Type key] {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this[key.ToIdentifierSymbol()];
+    }
+
     public PropertyBag()
     { }
 
-    [MemoryPackConstructor, JsonConstructor, Newtonsoft.Json.JsonConstructor]
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public PropertyBag(PropertyBagItem[]? rawItems)
     {
         if (rawItems != null && rawItems.Length != 0)
@@ -81,80 +69,7 @@ public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<Pr
     public override string ToString()
         => $"{nameof(PropertyBag)}({PropertyBagHelper.GetToStringArgs(_items)})";
 
-    public MutablePropertyBag ToMutable()
-        => new(this);
-
-    // Contains
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains<T>()
-        => this[typeof(T)] != null;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains(Symbol key)
-        => this[key] != null;
-
-    // TryGet
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryGet<T>([MaybeNullWhen(false)] out T value)
-        => TryGet(typeof(T), out value);
-
-    public bool TryGet<T>(Symbol key, [MaybeNullWhen(false)] out T value)
-    {
-        var objValue = this[key];
-        if (objValue == null) {
-            value = default!;
-            return false;
-        }
-        value = (T)objValue;
-        return true;
-    }
-
-    // Get
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T? Get<T>()
-        where T : class
-        => Get<T>(typeof(T));
-
-    public T? Get<T>(Symbol key)
-        where T : class
-        => (T?)this[key];
-
-    // GetOrDefault
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetOrDefault<T>()
-        => GetOrDefault<T>(typeof(T));
-
-    public T GetOrDefault<T>(Symbol key)
-    {
-        var value = this[key];
-        return value != null ? (T)value : default!;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetOrDefault<T>(T @default)
-        => GetOrDefault(typeof(T), @default);
-
-    public T GetOrDefault<T>(Symbol key, T @default)
-    {
-        var value = this[key];
-        return value != null ? (T)value : @default;
-    }
-
-    // Set
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PropertyBag Set<T>(T value)
-        => Set(typeof(T), value);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PropertyBag Set<T>(Symbol key, T value)
-        => Set(key, (object?)value);
-
-    public PropertyBag Set(Symbol key, object? value)
+    public PropertyBag Set(string key, object? value)
     {
         if (value == null)
             return Remove(key);
@@ -179,11 +94,7 @@ public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<Pr
         return new PropertyBag(items);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PropertyBag SetMany(PropertyBag items)
-        => SetMany(items.RawItems ?? []);
-
-    public PropertyBag SetMany(params PropertyBagItem[] items)
+    public PropertyBag SetMany(params ReadOnlySpan<PropertyBagItem> items)
     {
         var buffer = ArrayBuffer<PropertyBagItem>.Lease(true);
         try {
@@ -204,15 +115,9 @@ public readonly partial struct PropertyBag : IReadOnlyPropertyBag, IEquatable<Pr
         }
     }
 
-    // Remove
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PropertyBag Remove<T>()
-        => Remove(typeof(T));
-
-    public PropertyBag Remove(Symbol key)
+    public PropertyBag Remove(string key)
     {
-        if (key.IsEmpty)
+        if (key.IsNullOrEmpty())
             throw new ArgumentOutOfRangeException(nameof(key));
         if (_items == null)
             return this;

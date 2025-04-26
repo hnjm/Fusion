@@ -1,27 +1,25 @@
 namespace ActualLab.Testing;
 
-public class ThreadSafe<T>
+public class ThreadSafe<T>(T value)
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
     private readonly object _lock = new();
-    private T _value;
+#endif
 
     public T Value {
         get {
-            lock (_lock) {
-                return _value;
-            }
+            lock (_lock)
+                return field;
         }
         set {
-            lock (_lock) {
-                _value = value;
-            }
+            lock (_lock)
+                field = value;
         }
-    }
+    } = value!;
 
     public ThreadSafe() : this(default!) { }
-#pragma warning disable CS8618
-    public ThreadSafe(T value) => Value = value!;
-#pragma warning restore CS8618
 
     public override string ToString() => $"{GetType().GetName()}({Value})";
 

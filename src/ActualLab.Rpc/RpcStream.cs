@@ -1,13 +1,13 @@
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using ActualLab.Interception;
 using ActualLab.Rpc.Infrastructure;
+using ActualLab.Rpc.Serialization.Internal;
+using MessagePack;
 using Errors = ActualLab.Internal.Errors;
-using UnreferencedCode = ActualLab.Internal.UnreferencedCode;
 
 namespace ActualLab.Rpc;
 
 #pragma warning disable MA0055
-#pragma warning disable IL2046
 
 [DataContract]
 public abstract partial class RpcStream : IRpcObject
@@ -25,13 +25,13 @@ public abstract partial class RpcStream : IRpcObject
     public int AckAdvance { get; init; } = 61;
 
     // Non-serialized members
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public RpcObjectId Id { get; protected set; }
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public RpcPeer? Peer { get; protected set; }
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public abstract Type ItemType { get; }
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public abstract RpcObjectKind Kind { get; }
 
     public static RpcStream<T> New<T>(IAsyncEnumerable<T> outgoingSource)
@@ -42,11 +42,9 @@ public abstract partial class RpcStream : IRpcObject
     public override string ToString()
         => $"{GetType().GetName()}({Id} @ {Peer?.Ref}, {Kind})";
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     Task IRpcObject.Reconnect(CancellationToken cancellationToken)
         => Reconnect(cancellationToken);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     void IRpcObject.Disconnect()
         => Disconnect();
 
@@ -54,28 +52,29 @@ public abstract partial class RpcStream : IRpcObject
 
     protected internal abstract ArgumentList CreateStreamItemArguments();
     protected internal abstract ArgumentList CreateStreamBatchArguments();
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected internal abstract Task OnItem(long index, object? item);
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected internal abstract Task OnBatch(long index, object? items);
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected internal abstract Task OnEnd(long index, Exception? error);
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected abstract Task Reconnect(CancellationToken cancellationToken);
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected abstract void Disconnect();
 }
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
+[JsonConverter(typeof(RpcStreamJsonConverter))]
+[Newtonsoft.Json.JsonConverter(typeof(RpcStreamNewtonsoftJsonConverter))]
 public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
+    private readonly object _lock = new();
+#endif
     private readonly IAsyncEnumerable<T>? _localSource;
     private Channel<T>? _remoteChannel;
     private long _nextIndex;
     private bool _isRegistered;
     private bool _isDisconnected;
-    private readonly object _lock = new();
 
     [DataMember(Order = 2), MemoryPackOrder(2)]
     public RpcObjectId SerializedId {
@@ -109,25 +108,23 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
         }
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreMember]
     public override Type ItemType => typeof(T);
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreMember]
     public override RpcObjectKind Kind => _localSource != null ? RpcObjectKind.Local : RpcObjectKind.Remote;
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public RpcStream() { }
 
     public RpcStream(IAsyncEnumerable<T> localSource)
         => _localSource = localSource;
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     ~RpcStream()
     {
         if (_localSource == null)
             Close(Errors.AlreadyDisposed(GetType()));
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (_localSource != null)
@@ -151,6 +148,39 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
         }
     }
 
+    public static string SerializeToString(RpcStream<T>? stream)
+    {
+        if (stream == null)
+            return "";
+
+        using var formatter = ListFormat.CommaSeparated.CreateFormatter();
+        var id = stream.SerializedId;
+        formatter.Append(id.HostId.ToString());
+        formatter.Append(id.LocalId.ToString(CultureInfo.InvariantCulture));
+        formatter.Append(stream.AckPeriod.ToString(CultureInfo.InvariantCulture));
+        formatter.Append(stream.AckAdvance.ToString(CultureInfo.InvariantCulture));
+        formatter.AppendEnd();
+        return formatter.Output;
+    }
+
+    public static RpcStream<T>? DeserializeFromString(string? source)
+    {
+        if (source.IsNullOrEmpty())
+            return null;
+
+        using var parser = ListFormat.CommaSeparated.CreateParser(source);
+        parser.ParseNext();
+        var hostId = Guid.Parse(parser.Item);
+        parser.ParseNext();
+        var localId = long.Parse(parser.Item, CultureInfo.InvariantCulture);
+        var id = new RpcObjectId(hostId, localId);
+        parser.ParseNext();
+        var ackPeriod = int.Parse(parser.Item, CultureInfo.InvariantCulture);
+        parser.ParseNext();
+        var ackAdvance = int.Parse(parser.Item, CultureInfo.InvariantCulture);
+        return new RpcStream<T>() { SerializedId = id, AckPeriod = ackPeriod, AckAdvance = ackAdvance };
+    }
+
     // Protected methods
 
     internal IAsyncEnumerable<T> GetLocalSource()
@@ -165,7 +195,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
     protected internal override ArgumentList CreateStreamBatchArguments()
         => ArgumentList.New<long, T[]>(0L, default!);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected internal override Task OnItem(long index, object? item)
     {
         lock (_lock) {
@@ -183,7 +212,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected internal override Task OnBatch(long index, object? items)
     {
         lock (_lock) {
@@ -204,7 +232,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected internal override Task OnEnd(long index, Exception? error)
     {
         lock (_lock) {
@@ -221,7 +248,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected override Task Reconnect(CancellationToken cancellationToken)
     {
         lock (_lock)
@@ -230,7 +256,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
                 : Task.CompletedTask;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected override void Disconnect()
     {
         lock (_lock) {
@@ -244,14 +269,12 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
 
     // Private methods
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private void Close(Exception? error)
     {
         lock (_lock)
             CloseFromLock(error);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private void CloseFromLock(Exception? error)
     {
         if (_remoteChannel != null) {
@@ -265,24 +288,20 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private Task SendCloseFromLock()
     {
         _nextIndex = long.MaxValue;
         return SendAckFromLock(_nextIndex, true);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private Task SendResetFromLock(long index)
         => SendAckFromLock(index, true);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private Task MaybeSendAckFromLock(long index)
         => index % AckPeriod == 0 && index > 0
             ? SendAckFromLock(index)
             : Task.CompletedTask;
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private Task SendAckFromLock(long index, bool mustReset = false)
     {
         // Debug.WriteLine($"{Id}: <- ACK: ({index}, {mustReset})");
@@ -317,7 +336,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
             ? _current.Value
             : throw new InvalidOperationException($"{nameof(MoveNextAsync)} should be called first.");
 
-        [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
         public ValueTask DisposeAsync()
         {
             if (!ActiveObjects.TryRemove(this, out _))
@@ -327,7 +345,6 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
             return default;
         }
 
-        [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
         public ValueTask<bool> MoveNextAsync()
         {
             if (_isEnded)
@@ -341,7 +358,7 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
                     return MoveNext(ackTask);
             }
             catch (Exception e) {
-                _current = Result.Error<T>(e);
+                _current = Result.NewError<T>(e);
                 _isEnded = true;
             }
 
@@ -368,7 +385,7 @@ public sealed partial class RpcStream<T> : RpcStream, IAsyncEnumerable<T>
                     return true;
                 }
                 catch (Exception e) {
-                    _current = Result.Error<T>(e);
+                    _current = Result.NewError<T>(e);
                     _nextIndex++;
                     _isEnded = true;
                     return true;

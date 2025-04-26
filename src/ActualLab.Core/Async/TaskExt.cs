@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Internal;
 
 namespace ActualLab.Async;
@@ -6,13 +7,33 @@ namespace ActualLab.Async;
 
 public static partial class TaskExt
 {
-    private static readonly MethodInfo FromTypedTaskInternalMethod =
-        typeof(TaskExt).GetMethod(nameof(FromTypedTaskInternal), BindingFlags.Static | BindingFlags.NonPublic)!;
-    private static readonly ConcurrentDictionary<Type, Func<Task, IResult>> ToTypedResultCache = new();
+#if USE_UNSAFE_ACCESSORS
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_stateFlags")]
+    private static extern ref int StateFlagsGetter(Task task);
+#else
+    private static readonly Action<Task, int> StateFlagsSetter;
+#endif
 
-    public static readonly Task<Unit> UnitTask = Task.FromResult(Unit.Default);
-    public static readonly Task<bool> TrueTask = Task.FromResult(true);
-    public static readonly Task<bool> FalseTask = Task.FromResult(false);
+    public static readonly Task<Unit> UnitTask;
+    public static readonly Task<bool> TrueTask;
+    public static readonly Task<bool> FalseTask;
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume Task class is fully preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume Task class is fully preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume Task class is fully preserved")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(TaskExt))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Task<>))]
+    static TaskExt()
+    {
+        UnitTask = Task.FromResult(Unit.Default);
+        TrueTask = Task.FromResult(true);
+        FalseTask = Task.FromResult(false);
+#if !USE_UNSAFE_ACCESSORS
+        StateFlagsSetter = typeof(Task)
+            .GetField("m_stateFlags", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetSetter<Task, int>();
+#endif
+    }
 
     // NewNeverEndingUnreferenced
 
@@ -58,16 +79,26 @@ public static partial class TaskExt
             return TaskResultKind.Incomplete;
         if (task.IsCanceled)
             return TaskResultKind.Cancellation;
+
         return task.IsFaulted ? TaskResultKind.Error : TaskResultKind.Success;
     }
 
     // GetBaseException
 
     public static Exception GetBaseException(this Task task)
-        => task.AssertCompleted().Exception?.GetBaseException()
-            ?? (task.IsCanceled
-                ? new TaskCanceledException(task)
-                : throw Errors.TaskIsFaultedButNoExceptionAvailable());
+    {
+        if (task.IsFaulted)
+            return task.Exception!.GetBaseException();
+        if (task.IsCanceled)
+            return new TaskCanceledException(task);
+
+        throw Errors.TaskIsNeitherFaultedNorCancelled();
+    }
+
+    // IsCanceledOrFaultedWithOce
+
+    public static bool IsCanceledOrFaultedWithOce(this Task task)
+        => task.IsCanceled || (task.IsFaulted && task.Exception?.GetBaseException() is OperationCanceledException);
 
     // AssertXxx
 
@@ -79,11 +110,16 @@ public static partial class TaskExt
     public static Task<T> AssertCompleted<T>(this Task<T> task)
         => !task.IsCompleted ? throw Errors.TaskIsNotCompleted() : task;
 
-    // Private methods
+    // Internal methods
 
-    private static IResult FromTypedTaskInternal<T>(Task task)
-        // ReSharper disable once HeapView.BoxingAllocation
-        => task.IsCompletedSuccessfully()
-            ? Result.Value(((Task<T>) task).Result)
-            : Result.Error<T>(task.GetBaseException());
+    internal static void SetRunContinuationsAsynchronouslyFlag(Task task)
+    {
+        // 0x2000400 = (int)TaskStateFlags.WaitingForActivation | (int)InternalTaskOptions.PromiseTask;
+        const int stateFlags = 0x2000400 | (int)TaskContinuationOptions.RunContinuationsAsynchronously;
+#if USE_UNSAFE_ACCESSORS
+        StateFlagsGetter(task) = stateFlags;
+#else
+        StateFlagsSetter.Invoke(task, stateFlags);
+#endif
+    }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using ActualLab.Api.Internal;
 
@@ -20,7 +21,6 @@ public static class ApiArray
 
 #pragma warning disable MA0084
 
-[StructLayout(LayoutKind.Auto)]
 [CollectionBuilder(typeof(ApiArray), "New")]
 [JsonConverter(typeof(ApiArrayJsonConverter))]
 [Newtonsoft.Json.JsonConverter(typeof(ApiArrayNewtonsoftJsonConverter))]
@@ -32,13 +32,12 @@ public readonly partial struct ApiArray<T>(T[] items)
     private static readonly T[] EmptyItems = [];
     public static readonly ApiArray<T> Empty = default!;
 
-    private readonly T[]? _items = items is { Length: 0 } ? null : items;
-
     [DataMember(Order = 0), MemoryPackOrder(0)]
+    [field: AllowNull, MaybeNull]
     public T[] Items {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _items ?? EmptyItems;
-    }
+        get => field ?? EmptyItems;
+    } = items is { Length: 0 } ? null! : items;
 
     [MemoryPackIgnore]
     public int Count {
@@ -77,7 +76,8 @@ public readonly partial struct ApiArray<T>(T[] items)
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)Items).GetEnumerator();
 
-    public ApiArray<T> Clone() => IsEmpty ? Empty : new(Items.ToArray());
+    public ApiArray<T> Clone()
+        => IsEmpty ? Empty : new(Items.ToArray());
 
     public override string ToString()
     {
@@ -147,7 +147,9 @@ public readonly partial struct ApiArray<T>(T[] items)
         return -1;
     }
 
-    public ApiArray<T> Add(T item, bool addInFront = false)
+    // WithXxx
+
+    public ApiArray<T> With(T item, bool addInFront = false)
     {
         var newItems = new T[Count + 1];
         if (addInFront) {
@@ -161,24 +163,44 @@ public readonly partial struct ApiArray<T>(T[] items)
         return new ApiArray<T>(newItems);
     }
 
-    public ApiArray<T> TryAdd(T item, bool addInFront = false)
-        => Contains(item) ? this : Add(item, addInFront);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ApiArray<T> WithMany(params ReadOnlySpan<T> newItems)
+        => WithMany(false, newItems);
 
-    public ApiArray<T> AddOrReplace(T item, bool addInFront = false)
-        => AddOrUpdate(item, _ => item, addInFront);
+    public ApiArray<T> WithMany(bool addInFront, params ReadOnlySpan<T> newItems)
+    {
+        var result = new T[items.Length + newItems.Length];
+        if (addInFront) {
+            newItems.CopyTo(result);
+            items.CopyTo(result.AsSpan(newItems.Length));
+        }
+        else {
+            items.CopyTo(result.AsSpan());
+            newItems.CopyTo(result.AsSpan(items.Length));
+        }
+        return new(result);
+    }
 
-    public ApiArray<T> AddOrUpdate(T item, Func<T, T> updater, bool addInFront = false)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ApiArray<T> WithOrSkip(T item, bool addInFront = false)
+        => Contains(item) ? this : With(item, addInFront);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ApiArray<T> WithOrReplace(T item, bool addInFront = false)
+        => WithOrUpdate(item, _ => item, addInFront);
+
+    public ApiArray<T> WithOrUpdate(T item, Func<T, T> updater, bool addInFront = false)
     {
         var index = IndexOf(item);
         if (index < 0)
-            return Add(item, addInFront);
+            return With(item, addInFront);
 
         var newItems = Items.ToArray();
         newItems[index] = updater.Invoke(newItems[index]);
         return new(newItems);
     }
 
-    public ApiArray<T> UpdateWhere(Func<T, bool> where, Func<T, T> updater)
+    public ApiArray<T> WithUpdate(Func<T, bool> where, Func<T, T> updater)
     {
         var items = Items;
         if (items.Length == 0)
@@ -195,7 +217,9 @@ public readonly partial struct ApiArray<T>(T[] items)
         return copy == null ? this : new ApiArray<T>(copy);
     }
 
-    public ApiArray<T> RemoveAll(T item)
+    // Without
+
+    public ApiArray<T> Without(T item)
     {
         var items = Items;
         if (items.Length == 0)
@@ -211,7 +235,7 @@ public readonly partial struct ApiArray<T>(T[] items)
             : new ApiArray<T>(list);
     }
 
-    public ApiArray<T> RemoveAll(Func<T, bool> predicate)
+    public ApiArray<T> Without(Func<T, bool> predicate)
     {
         var items = Items;
         if (items.Length == 0)
@@ -227,7 +251,7 @@ public readonly partial struct ApiArray<T>(T[] items)
             : new ApiArray<T>(list);
     }
 
-    public ApiArray<T> RemoveAll(Func<T, int, bool> predicate)
+    public ApiArray<T> Without(Func<T, int, bool> predicate)
     {
         var items = Items;
         if (items.Length == 0)
@@ -244,7 +268,9 @@ public readonly partial struct ApiArray<T>(T[] items)
             : new ApiArray<T>(list);
     }
 
-    public ApiArray<T> Trim(int maxCount)
+    // ToTrimmed
+
+    public ApiArray<T> ToTrimmed(int maxCount)
     {
 #if NET8_0_OR_GREATER
         ArgumentOutOfRangeException.ThrowIfNegative(maxCount);

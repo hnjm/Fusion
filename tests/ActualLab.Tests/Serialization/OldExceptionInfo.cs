@@ -1,10 +1,11 @@
 using System.Text.Json.Serialization;
 using ActualLab.Reflection;
 using ActualLab.Serialization.Internal;
+using MessagePack;
 
 namespace ActualLab.Tests.Serialization;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
 public readonly partial struct OldExceptionInfo : IEquatable<OldExceptionInfo>
 {
@@ -22,12 +23,13 @@ public readonly partial struct OldExceptionInfo : IEquatable<OldExceptionInfo>
     public string Message => _message ?? "";
     [DataMember(Order = 2), MemoryPackOrder(2)]
     public TypeRef WrappedTypeRef { get; }
-    [IgnoreDataMember, MemoryPackIgnore]
-    public bool IsNone => TypeRef.AssemblyQualifiedName.IsEmpty;
-    [IgnoreDataMember, MemoryPackIgnore]
-    public bool HasWrappedTypeRef => !WrappedTypeRef.AssemblyQualifiedName.IsEmpty;
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+    [IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
+    public bool IsNone => TypeRef.AssemblyQualifiedName.IsNullOrEmpty();
+    [IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
+    public bool HasWrappedTypeRef => !WrappedTypeRef.AssemblyQualifiedName.IsNullOrEmpty();
+
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public OldExceptionInfo(TypeRef typeRef, string? message, TypeRef wrappedTypeRef)
     {
         TypeRef = typeRef;

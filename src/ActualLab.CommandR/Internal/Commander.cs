@@ -1,20 +1,20 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ActualLab.CommandR.Internal;
 
 public class Commander : ICommander
 {
-    private static readonly PropertyInfo ChainIdSetterProperty =
-        typeof(IEventCommand).GetProperty(nameof(IEventCommand.ChainId))!;
-
-    private Action<IEventCommand, Symbol>? _chainIdSetter;
-    private ILogger? _log;
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume all command handling code is preserved")]
+    [field: AllowNull, MaybeNull]
+    protected static Action<IEventCommand, string> ChainIdSetter
+        => field ??= typeof(IEventCommand).GetProperty(nameof(IEventCommand.ChainId))!.GetSetter<string>();
 
     public IServiceProvider Services { get; }
     public CommanderHub Hub { get; }
 
-    protected Action<IEventCommand, Symbol> ChainIdSetter => _chainIdSetter ??= ChainIdSetterProperty.GetSetter<Symbol>();
-    protected ILogger Log => _log ??= Services.LogFor(GetType());
+    [field: AllowNull, MaybeNull]
+    protected ILogger Log => field ??= Services.LogFor(GetType());
 
     public Commander(IServiceProvider services)
     {
@@ -24,7 +24,8 @@ public class Commander : ICommander
 
     public Task Run(CommandContext context, CancellationToken cancellationToken = default)
     {
-        if (context.UntypedCommand is IEventCommand { ChainId.IsEmpty: true } eventCommand)
+#pragma warning disable MA0100
+        if (context.UntypedCommand is IEventCommand eventCommand && eventCommand.ChainId.IsNullOrEmpty())
             return RunEvent(eventCommand, (CommandContext<Unit>)context, cancellationToken);
 
         // Task.Run is used to call RunInternal to make sure parent
@@ -37,6 +38,7 @@ public class Commander : ICommander
                 Activity.Current = currentActivity; // We want to restore it even though we suppress the flow here
             return RunCommand(context, cancellationToken);
         }, CancellationToken.None);
+#pragma warning restore MA0100
     }
 
     protected virtual async Task RunCommand(
@@ -65,7 +67,7 @@ public class Commander : ICommander
         IEventCommand command, CommandContext<Unit> context, CancellationToken cancellationToken = default)
     {
         try {
-            if (!command.ChainId.IsEmpty)
+            if (!command.ChainId.IsNullOrEmpty())
                 throw new ArgumentOutOfRangeException(nameof(command));
 
             var handlers = Hub.HandlerResolver.GetCommandHandlers(command);

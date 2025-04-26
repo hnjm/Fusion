@@ -1,18 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <IsPackable>False</IsPackable>
     <IsPublishable>False</IsPublishable>
     <RollForward>Major</RollForward>
     <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
     <DependencyVersion>Highest</DependencyVersion>
+    <NoWarn>$(NoWarn);NU1901;NU1902;NU1903;NU1904;VSTHRD200;MA0011;MA0051;MA0144</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Bullseye" />
     <PackageReference Include="CliWrap" />
-    <PackageReference Include="ActualLab.Core" />
+    <PackageReference Include="ActualLab.Core" PrivateAssets="all" />
     <PackageReference Include="System.CommandLine.DragonFruit" />
   </ItemGroup>
 
@@ -20,7 +22,4 @@
     <UpToDateCheckInput Condition="Exists('..\version.json')" Include="..\version.json" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Remove="Directory.Build.props" />
-  </ItemGroup>
 </Project>

@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using ActualLab.Api.Internal;
 using ActualLab.Conversion;
+using MessagePack;
 
 namespace ActualLab.Api;
 
@@ -25,8 +27,13 @@ public static class ApiNullable
 /// </summary>
 /// <typeparam name="T">The type of <see cref="Value"/>.</typeparam>
 [StructLayout(LayoutKind.Sequential, Pack = 1)] // Important!
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+#if NET8_0_OR_GREATER
+[MessagePackObject(true, SuppressSourceGeneration = true)]
+#else
+[MessagePackFormatter(typeof(ApiNullableMessagePackFormatter<>))]
+#endif
 [DebuggerDisplay("{" + nameof(DebugValue) + "}")]
 public readonly partial struct ApiNullable<T>
     : IEquatable<ApiNullable<T>>, IComparable<ApiNullable<T>>,
@@ -35,7 +42,7 @@ public readonly partial struct ApiNullable<T>
 {
     public static readonly ApiNullable<T> Null;
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     private string DebugValue => ToString();
 
     [DataMember(Order = 0), MemoryPackOrder(0), JsonIgnore, Newtonsoft.Json.JsonIgnore]
@@ -44,7 +51,7 @@ public readonly partial struct ApiNullable<T>
     [DataMember(Order = 1), MemoryPackOrder(1), JsonIgnore, Newtonsoft.Json.JsonIgnore]
     public T ValueOrDefault { get; }
 
-    [JsonInclude, Newtonsoft.Json.JsonProperty, MemoryPackIgnore]
+    [JsonInclude, Newtonsoft.Json.JsonProperty, MemoryPackIgnore, IgnoreMember]
     public T? Value => HasValue ? ValueOrDefault : null;
 
     // Constructors
@@ -57,7 +64,7 @@ public readonly partial struct ApiNullable<T>
         ValueOrDefault = value.GetValueOrDefault();
     }
 
-    [MemoryPackConstructor]
+    [MemoryPackConstructor, SerializationConstructor]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     // ReSharper disable once ConvertToPrimaryConstructor
     public ApiNullable(bool hasValue, T valueOrDefault)

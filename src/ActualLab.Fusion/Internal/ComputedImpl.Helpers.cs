@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
+using ActualLab.Fusion.Client;
+using ActualLab.Interception;
 using ActualLab.Rpc;
-using ActualLab.Rpc.Infrastructure;
 
 namespace ActualLab.Fusion.Internal;
 
@@ -22,7 +24,7 @@ public static partial class ComputedImpl
             return TryUseExistingWithCallOptions(existing, context);
 
         // The most frequent path
-        if (existing == null || existing.ConsistencyState != ConsistencyState.Consistent)
+        if (existing is not { ConsistencyState: ConsistencyState.Consistent })
             return false;
 
         // Inlined existing.UseNew(context, usedBy)
@@ -43,7 +45,8 @@ public static partial class ComputedImpl
             // CallOptions.Invalidate is:
             // - always paired with CallOptions.GetExisting
             // - never paired with CallOptions.Capture
-            existing.InvalidateFromCall();
+            if (existing is not IRemoteComputed)
+                existing.Invalidate();
             return true;
         }
 
@@ -85,30 +88,27 @@ public static partial class ComputedImpl
         context.TryCapture(computed);
     }
 
-    public static T Strip<T>(Computed<T>? computed, ComputeContext context)
-    {
-        if (computed == null)
-            return default!;
-        if (CallOptions.GetExisting == (context.CallOptions & CallOptions.GetExisting))
-            return default!;
+    public static T GetValueOrDefault<T>(Computed<T>? computed, ComputeContext context)
+        => computed == null || CallOptions.GetExisting == (context.CallOptions & CallOptions.GetExisting)
+            ? default!
+            : computed.Value;
 
-        return computed.Value;
-    }
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "We assume type constructors are preserved")]
+    public static object? GetValueOrDefaultUntyped(Computed? computed, ComputeContext context, Type outputType)
+        => computed == null || CallOptions.GetExisting == (context.CallOptions & CallOptions.GetExisting)
+            ? outputType.GetDefaultValue()!
+            : computed.Value;
 
-    public static Task<T> StripToTask<T>(Computed<T>? computed, ComputeContext context)
-    {
-        if (computed == null)
-            return TaskCache<T>.DefaultResultTask;
-        if (CallOptions.GetExisting == (context.CallOptions & CallOptions.GetExisting))
-            return TaskCache<T>.DefaultResultTask;
-
-        return computed.OutputAsTask;
-    }
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "We assume Task<T> constructors are preserved")]
+    public static Task GetValueOrDefaultAsTask(Computed? computed, ComputeContext context, Type outputType)
+        => computed == null || CallOptions.GetExisting == (context.CallOptions & CallOptions.GetExisting)
+            ? TaskExt.FromDefaultResult(outputType)
+            : computed.GetValuePromise();
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static Task FinalizeAndTryReprocessInternalCancellation<T>(
+    public static Task FinalizeAndTryReprocessInternalCancellation(
         string methodName,
-        Computed<T> computed,
+        Computed computed,
         Exception error,
         CpuTimestamp startedAt,
         ref int tryIndex,
@@ -117,14 +117,14 @@ public static partial class ComputedImpl
     {
         if (error is not OperationCanceledException) {
             // Not a cancellation
-            computed.TrySetOutput(Result.Error<T>(error));
+            computed.TrySetError(error);
             return SpecialTasks.MustReturn;
         }
 
         if (cancellationToken.IsCancellationRequested || error is RpcRerouteException) {
             // !!! Cancellation of our own token & RpcRerouteException always "pass through"
             computed.Invalidate(true); // Instant invalidation on cancellation
-            computed.TrySetOutput(Result.Error<T>(error));
+            computed.TrySetError(error);
             return SpecialTasks.MustThrow;
         }
 
@@ -132,7 +132,7 @@ public static partial class ComputedImpl
         if (++tryIndex > cancellationReprocessingOptions.MaxTryCount
             || startedAt.Elapsed > cancellationReprocessingOptions.MaxDuration) {
             // All of reprocessing attempts are exhauseted
-            computed.TrySetOutput(Result.Error<T>(error));
+            computed.TrySetError(error);
             return SpecialTasks.MustReturn;
         }
 
@@ -141,7 +141,7 @@ public static partial class ComputedImpl
         // - we must reprocess it w/ a delay.
 
         computed.Invalidate(true); // Instant invalidation on cancellation
-        computed.TrySetOutput(Result.Error<T>(error));
+        computed.TrySetError(error);
         var delay = cancellationReprocessingOptions.RetryDelays[tryIndex];
         log.LogWarning(error,
             "{Method} #{TryIndex} for {Category} was cancelled internally, will retry in {Delay}",
@@ -152,27 +152,20 @@ public static partial class ComputedImpl
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool FinalizeAndTryReturnComputed<T>(
-        Computed<T> computed,
+    public static bool FinalizeAndTryReturnComputed(
+        Computed computed,
         Exception error,
         CancellationToken cancellationToken)
     {
         if (error is not OperationCanceledException) {
             // Not a cancellation
-            computed.TrySetOutput(Result.Error<T>(error));
+            computed.TrySetError(error);
             return true;
         }
 
         // Cancellation
         computed.Invalidate(true); // Instant invalidation on cancellation
-        computed.TrySetOutput(Result.Error<T>(error));
+        computed.TrySetError(error);
         return !(cancellationToken.IsCancellationRequested || error is RpcRerouteException);
-    }
-
-    // Nested types
-
-    private static class TaskCache<T>
-    {
-        public static readonly Task<T> DefaultResultTask = Task.FromResult(default(T)!);
     }
 }

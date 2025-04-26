@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using ActualLab.Fusion.EntityFramework;
 
@@ -9,25 +10,27 @@ public interface IDbUserRepo<in TDbContext, TDbUser, TDbUserId>
     where TDbUser : DbUser<TDbUserId>, new()
     where TDbUserId : notnull
 {
-    Type UserEntityType { get; }
+    public Type UserEntityType { get; }
 
     // Write methods
-    Task<TDbUser> Create(TDbContext dbContext, User user, CancellationToken cancellationToken = default);
-    Task<(TDbUser DbUser, bool IsCreated)> GetOrCreateOnSignIn(
+    public Task<TDbUser> Create(TDbContext dbContext, User user, CancellationToken cancellationToken = default);
+    public Task<(TDbUser DbUser, bool IsCreated)> GetOrCreateOnSignIn(
         TDbContext dbContext, User user, CancellationToken cancellationToken = default);
-    Task Edit(
+    public Task Edit(
         TDbContext dbContext, TDbUser dbUser, Auth_EditUser command, CancellationToken cancellationToken = default);
-    Task Remove(
+    public Task Remove(
         TDbContext dbContext, TDbUser dbUser, CancellationToken cancellationToken = default);
 
     // Read methods
-    Task<TDbUser?> Get(DbShard shard, TDbUserId userId, CancellationToken cancellationToken = default);
-    Task<TDbUser?> Get(TDbContext dbContext, TDbUserId userId, bool forUpdate, CancellationToken cancellationToken = default);
-    Task<TDbUser?> GetByUserIdentity(
+    public Task<TDbUser?> Get(string shard, TDbUserId userId, CancellationToken cancellationToken = default);
+    public Task<TDbUser?> Get(TDbContext dbContext, TDbUserId userId, bool forUpdate, CancellationToken cancellationToken = default);
+    public Task<TDbUser?> GetByUserIdentity(
         TDbContext dbContext, UserIdentity userIdentity, bool forUpdate, CancellationToken cancellationToken = default);
 }
 
-public class DbUserRepo<TDbContext, TDbUser, TDbUserId>(
+public class DbUserRepo<TDbContext,
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TDbUser,
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TDbUserId>(
     DbAuthService<TDbContext>.Options settings,
     IServiceProvider services
     ) : DbServiceBase<TDbContext>(services), IDbUserRepo<TDbContext, TDbUser, TDbUserId>
@@ -58,7 +61,7 @@ public class DbUserRepo<TDbContext, TDbUser, TDbUserId>(
             Id = id,
             Version = VersionGenerator.NextVersion(),
             Name = user.Name,
-            Claims = user.Claims.ToImmutableDictionary(),
+            Claims = user.Claims.ToImmutableDictionary(StringComparer.Ordinal),
         };
         dbContext.Add(dbUser);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -113,7 +116,7 @@ public class DbUserRepo<TDbContext, TDbUser, TDbUserId>(
 
     // Read methods
 
-    public async Task<TDbUser?> Get(DbShard shard, TDbUserId userId, CancellationToken cancellationToken = default)
+    public async Task<TDbUser?> Get(string shard, TDbUserId userId, CancellationToken cancellationToken = default)
         => await UserResolver.Get(shard, userId, cancellationToken).ConfigureAwait(false);
 
     public virtual async Task<TDbUser?> Get(
@@ -140,7 +143,7 @@ public class DbUserRepo<TDbContext, TDbUser, TDbUserId>(
         var dbUserIdentities = forUpdate
             ? dbContext.Set<DbUserIdentity<TDbUserId>>().ForNoKeyUpdate()
             : dbContext.Set<DbUserIdentity<TDbUserId>>();
-        var id = userIdentity.Id.Value;
+        var id = userIdentity.Id;
         var dbUserIdentity = await dbUserIdentities
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
             .ConfigureAwait(false);

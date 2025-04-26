@@ -1,6 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
 using ActualLab.Channels;
-using ActualLab.Internal;
 using ActualLab.Rpc.Infrastructure;
 
 namespace ActualLab.Rpc;
@@ -14,7 +12,6 @@ public abstract class RpcClient(IServiceProvider services) : RpcServiceBase(serv
         AllowSynchronousContinuations = true,
     };
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcConnection> Connect(RpcClientPeer clientPeer, CancellationToken cancellationToken)
         => clientPeer.ConnectionKind switch {
             RpcPeerConnectionKind.Remote => ConnectRemote(clientPeer, cancellationToken),
@@ -29,13 +26,14 @@ public abstract class RpcClient(IServiceProvider services) : RpcServiceBase(serv
     {
         var serverPeerRef = RpcPeerRef.NewServer(
             RpcPeerRef.LoopbackKeyPrefix + clientPeer.ClientId,
+            clientPeer.SerializationFormat.Key,
             clientPeer.Ref.IsBackend);
         var serverPeer = Hub.GetServerPeer(serverPeerRef);
         var channelPair = ChannelPair.CreateTwisted<RpcMessage>(LocalChannelOptions);
-        var clientConnection = new RpcConnection(channelPair.Channel1, PropertyBag.Empty.Set((RpcPeer)clientPeer)) {
+        var clientConnection = new RpcConnection(channelPair.Channel1, PropertyBag.Empty.KeylessSet((RpcPeer)clientPeer)) {
             IsLocal = true,
         };
-        var serverConnection = new RpcConnection(channelPair.Channel2, PropertyBag.Empty.Set((RpcPeer)serverPeer)) {
+        var serverConnection = new RpcConnection(channelPair.Channel2, PropertyBag.Empty.KeylessSet((RpcPeer)serverPeer)) {
             IsLocal = true,
         };
         serverPeer.SetConnection(serverConnection);

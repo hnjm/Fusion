@@ -1,13 +1,16 @@
+using System.Diagnostics.CodeAnalysis;
 using Newtonsoft.Json;
 using JsonConverter = Newtonsoft.Json.JsonConverter;
 using JsonSerializer = Newtonsoft.Json.JsonSerializer;
 
 namespace ActualLab.Api.Internal;
 
-#pragma warning disable IL2026, CA1812
+#pragma warning disable CA1812
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Used constructors should be there for sure.")]
 public class ApiArrayNewtonsoftJsonConverter : JsonConverter
 {
+    // TODO: Replace w/ GenericInstanceCache
     private static readonly ConcurrentDictionary<Type, JsonConverter?> ConverterCache = new();
 
     public override bool CanConvert(Type objectType)
@@ -39,7 +42,8 @@ public class ApiArrayNewtonsoftJsonConverter : JsonConverter
     private static bool IsApiArray(Type type)
         => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ApiArray<>);
 
-    // Nested type
+    // Nested types
+
     private sealed class Converter<T> : Newtonsoft.Json.JsonConverter<ApiArray<T>>
     {
         public override ApiArray<T> ReadJson(

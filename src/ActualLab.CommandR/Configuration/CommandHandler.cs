@@ -4,17 +4,17 @@ namespace ActualLab.CommandR.Configuration;
 
 public interface ICommandHandler
 {
-    Symbol Id { get; }
-    bool IsFilter { get; }
-    double Priority { get; }
+    public string Id { get; }
+    public bool IsFilter { get; }
+    public double Priority { get; }
 
-    Type GetHandlerServiceType();
-    object GetHandlerService(ICommand command, CommandContext context);
-    Task Invoke(ICommand command, CommandContext context, CancellationToken cancellationToken);
+    public Type GetHandlerServiceType();
+    public object GetHandlerService(ICommand command, CommandContext context);
+    public Task Invoke(ICommand command, CommandContext context, CancellationToken cancellationToken);
 }
 
 public abstract record CommandHandler(
-    Symbol Id,
+    string Id,
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type CommandType,
     bool IsFilter = false,
     double Priority = 0
@@ -28,7 +28,7 @@ public abstract record CommandHandler(
         CancellationToken cancellationToken);
 
     public override string ToString()
-        => $"{Id.Value}[Priority = {Priority}{(IsFilter ? ", IsFilter = true" : "")}]";
+        => $"{Id}[Priority = {Priority}{(IsFilter ? ", IsFilter = true" : "")}]";
 
     // This record relies on reference-based equality
     public virtual bool Equals(CommandHandler? other) => ReferenceEquals(this, other);
@@ -37,7 +37,7 @@ public abstract record CommandHandler(
 
 public abstract record CommandHandler<
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TCommand>
-    (Symbol Id, bool IsFilter = false, double Priority = 0)
+    (string Id, bool IsFilter = false, double Priority = 0)
     : CommandHandler(Id, typeof(TCommand), IsFilter, Priority)
     where TCommand : class, ICommand
 {

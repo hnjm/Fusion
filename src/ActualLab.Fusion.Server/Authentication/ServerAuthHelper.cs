@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using ActualLab.Fusion.Authentication;
@@ -26,10 +27,12 @@ public class ServerAuthHelper : IHasServices
             => serverAuthHelper.IsCloseWindowRequest(httpContext);
     }
 
-    protected IAuth Auth { get; }
-    protected IAuthBackend AuthBackend { get; }
-    protected ISessionResolver SessionResolver { get; }
-    protected AuthSchemasCache AuthSchemasCache { get; }
+    [field: MaybeNull, AllowNull]
+    protected IAuth Auth => field ??= Services.GetRequiredService<IAuth>();
+    [field: MaybeNull, AllowNull]
+    protected IAuthBackend AuthBackend => field ??= Services.GetRequiredService<IAuthBackend>();
+    [field: MaybeNull, AllowNull]
+    protected ISessionResolver SessionResolver => field ??= Services.GetRequiredService<ISessionResolver>();
     protected ICommander Commander { get; }
     protected MomentClockSet Clocks { get; }
 
@@ -38,16 +41,17 @@ public class ServerAuthHelper : IHasServices
     public ILogger Log { get; }
     public Session Session => SessionResolver.Session;
 
+    protected string? Schemas {
+        get;
+        set => Interlocked.Exchange(ref field, value);
+    }
+
     public ServerAuthHelper(Options settings, IServiceProvider services)
     {
         Settings = settings;
         Services = services;
         Log = services.LogFor(GetType());
 
-        Auth = services.GetRequiredService<IAuth>();
-        AuthBackend = services.GetRequiredService<IAuthBackend>();
-        SessionResolver = services.GetRequiredService<ISessionResolver>();
-        AuthSchemasCache = services.GetRequiredService<AuthSchemasCache>();
         Commander = services.Commander();
         Clocks = services.Clocks();
     }
@@ -56,7 +60,7 @@ public class ServerAuthHelper : IHasServices
     {
         string? schemas;
         if (cache) {
-            schemas = AuthSchemasCache.Schemas;
+            schemas = Schemas;
             if (schemas != null)
                 return schemas;
         }
@@ -68,7 +72,7 @@ public class ServerAuthHelper : IHasServices
         }
         schemas = ListFormat.Default.Format(lSchemas);
         if (cache)
-            AuthSchemasCache.Schemas = schemas;
+            Schemas = schemas;
         return schemas;
     }
 
@@ -193,7 +197,10 @@ public class ServerAuthHelper : IHasServices
             return false;
 
         var httpUserIdentityName = httpUser.Identity?.Name ?? "";
-        var claims = httpUser.Claims.ToImmutableDictionary(c => c.Type, c => c.Value);
+        var claims = httpUser.Claims
+            .GroupBy(c => c.Type, StringComparer.Ordinal)
+            .Select(g => (g.Key, Value: g.Select(c => c.Value).ToDelimitedString("\n")))
+            .ToImmutableDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
         var id = FirstClaimOrDefault(claims, Settings.IdClaimKeys) ?? httpUserIdentityName;
         var identity = new UserIdentity(schema, id);
         return user.Identities.ContainsKey(identity);
@@ -203,7 +210,10 @@ public class ServerAuthHelper : IHasServices
         User? user, ClaimsPrincipal httpUser, string schema)
     {
         var httpUserIdentityName = httpUser.Identity?.Name ?? "";
-        var claims = httpUser.Claims.ToApiMap(c => c.Type, c => c.Value, StringComparer.Ordinal);
+        var claims = httpUser.Claims
+            .GroupBy(c => c.Type, StringComparer.Ordinal)
+            .Select(g => (g.Key, Value: g.Select(c => c.Value).ToDelimitedString("\n")))
+            .ToApiMap(x => x.Key, x => x.Value, StringComparer.Ordinal);
         var id = FirstClaimOrDefault(claims, Settings.IdClaimKeys) ?? httpUserIdentityName;
         var name = FirstClaimOrDefault(claims, Settings.NameClaimKeys) ?? httpUserIdentityName;
         var identity = new UserIdentity(schema, id);
@@ -213,14 +223,14 @@ public class ServerAuthHelper : IHasServices
 
         if (user == null)
             // Create
-            user = new User(Symbol.Empty, name) {
+            user = new User("", name) {
                 Claims = claims,
                 Identities = identities,
             };
         else {
             // Update
             user = user with {
-                Claims = claims.With(user.Claims),
+                Claims = claims.WithMany(user.Claims),
                 Identities = identities,
             };
         }

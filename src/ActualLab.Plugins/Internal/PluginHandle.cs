@@ -1,22 +1,19 @@
-using System.Diagnostics.CodeAnalysis;
 using ActualLab.Plugins.Metadata;
 
 namespace ActualLab.Plugins.Internal;
 
-#pragma warning disable CA1721
+#pragma warning disable CA1721, IL2026
 
 public interface IPluginHandle
 {
-    IEnumerable<object> Instances { get; }
-    [RequiresUnreferencedCode(UnreferencedCode.Plugins)]
-    IEnumerable<object> GetInstances(Func<PluginInfo, bool> predicate);
+    public IEnumerable<object> Instances { get; }
+    public IEnumerable<object> GetInstances(Func<PluginInfo, bool> predicate);
 }
 
 public interface IPluginHandle<out TPlugin> : IPluginHandle
 {
-    new IEnumerable<TPlugin> Instances { get; }
-    [RequiresUnreferencedCode(UnreferencedCode.Plugins)]
-    new IEnumerable<TPlugin> GetInstances(Func<PluginInfo, bool> predicate);
+    public new IEnumerable<TPlugin> Instances { get; }
+    public new IEnumerable<TPlugin> GetInstances(Func<PluginInfo, bool> predicate);
 }
 
 public class PluginHandle<TPlugin> : IPluginHandle<TPlugin>
@@ -29,7 +26,6 @@ public class PluginHandle<TPlugin> : IPluginHandle<TPlugin>
     IEnumerable<object> IPluginHandle.Instances => Instances.Cast<object>();
     public IEnumerable<TPlugin> Instances => _lazyInstances.Value;
 
-    [RequiresUnreferencedCode(UnreferencedCode.Plugins)]
     public PluginHandle(PluginSetInfo plugins,
         IPluginCache pluginCache, IEnumerable<IPluginFilter> pluginFilters)
     {
@@ -40,13 +36,10 @@ public class PluginHandle<TPlugin> : IPluginHandle<TPlugin>
             () => GetInstances(_ => true).Cast<TPlugin>().ToArray());
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Plugins)]
     IEnumerable<object> IPluginHandle.GetInstances(Func<PluginInfo, bool> predicate)
         => GetInstances(predicate);
-    [RequiresUnreferencedCode(UnreferencedCode.Plugins)]
     IEnumerable<TPlugin> IPluginHandle<TPlugin>.GetInstances(Func<PluginInfo, bool> predicate)
         => GetInstances(predicate).Cast<TPlugin>();
-    [RequiresUnreferencedCode(UnreferencedCode.Plugins)]
     protected IEnumerable<object> GetInstances(Func<PluginInfo, bool> predicate)
     {
         var requestedType = typeof(TPlugin);

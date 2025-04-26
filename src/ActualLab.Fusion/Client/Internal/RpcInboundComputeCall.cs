@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using ActualLab.Internal;
 using ActualLab.Rpc;
 using ActualLab.Rpc.Infrastructure;
@@ -8,19 +7,16 @@ namespace ActualLab.Fusion.Client.Internal;
 
 #pragma warning disable RCS1210, MA0022
 
-public interface IRpcInboundComputeCall;
-
-public class RpcInboundComputeCall<TResult> : RpcInboundCall<TResult>, IRpcInboundComputeCall
+public abstract class RpcInboundComputeCall : RpcInboundCall
 {
     public override string DebugTypeName => "<=";
     public override int CompletedStage
-        => UntypedResultTask is { IsCompleted: true } ? (Computed is { } c && c.IsInvalidated() ? 2 : 1) : 0;
+        => ResultTask is { IsCompleted: true } ? (UntypedComputed is { } c && c.IsInvalidated() ? 2 : 1) : 0;
     public override string CompletedStageName
         => CompletedStage switch { 0 => "", 1 => "ResultReady", _ => "Invalidated" };
+    public abstract Computed? UntypedComputed { get; }
 
-    public Computed<TResult>? Computed { get; protected set; }
-
-    public RpcInboundComputeCall(RpcInboundContext context, RpcMethodDef methodDef)
+    protected RpcInboundComputeCall(RpcInboundContext context, RpcMethodDef methodDef)
         : base(context, methodDef)
     {
         if (NoWait)
@@ -28,22 +24,6 @@ public class RpcInboundComputeCall<TResult> : RpcInboundCall<TResult>, IRpcInbou
     }
 
     // Protected & private methods
-
-    protected override async Task<TResult> InvokeTarget()
-    {
-        var ccs = Fusion.Computed.BeginCapture();
-        try {
-            return await base.InvokeTarget().ConfigureAwait(false);
-        }
-        finally {
-            var computed = ccs.Context.TryGetCaptured<TResult>();
-            if (computed != null) {
-                lock (Lock)
-                    Computed ??= computed;
-            }
-            ccs.Dispose();
-        }
-    }
 
     public override Task? TryReprocess(int completedStage, CancellationToken cancellationToken)
     {
@@ -55,13 +35,12 @@ public class RpcInboundComputeCall<TResult> : RpcInboundCall<TResult>, IRpcInbou
             return WhenProcessed = completedStage switch {
                 >= 2 => Task.CompletedTask,
                 1 => ProcessStage2(cancellationToken),
-                _ => ProcessStage1(cancellationToken)
+                _ => ProcessStage1Plus(cancellationToken)
             };
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    protected override async Task ProcessStage1(CancellationToken cancellationToken)
+    protected override async Task ProcessStage1Plus(CancellationToken cancellationToken)
     {
         await ResultTask!.SilentAwait(false);
         lock (Lock) {
@@ -69,26 +48,26 @@ public class RpcInboundComputeCall<TResult> : RpcInboundCall<TResult>, IRpcInbou
                 trace.Complete(this);
                 Trace = null;
             }
-            if (Computed != null) {
+            if (Context.Peer.Handshake is { ProtocolVersion: <= 1 } && UntypedComputed != null) {
                 // '@' is required to make it compatible with pre-v7.2 versions
-                var versionHeader = new RpcHeader(FusionRpcHeaderNames.Version, Computed.Version.FormatVersion('@'));
+                var versionHeader = new RpcHeader(WellKnownRpcHeaders.Version, UntypedComputed.Version.FormatVersion('@'));
                 ResultHeaders = ResultHeaders.WithOrReplace(versionHeader);
             }
-        }
-        if (CallCancelToken.IsCancellationRequested) {
-            // The call is cancelled by remote party
-            Unregister();
-            return;
+            if (CallCancelToken.IsCancellationRequested) {
+                // The call is cancelled by remote party
+                UnregisterFromLock();
+                return;
+            }
         }
         await SendResult().ConfigureAwait(false);
         await ProcessStage2(cancellationToken).ConfigureAwait(false);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     protected async Task ProcessStage2(CancellationToken cancellationToken)
     {
+        var mustSendInvalidation = true;
         try {
-            if (Computed is { } computed) {
+            if (UntypedComputed is { } computed) {
                 using var commonCts = cancellationToken.LinkWith(CallCancelToken);
                 await computed.WhenInvalidated(commonCts.Token).ConfigureAwait(false);
             }
@@ -98,17 +77,65 @@ public class RpcInboundComputeCall<TResult> : RpcInboundCall<TResult>, IRpcInbou
         }
         catch (OperationCanceledException) when (CallCancelToken.IsCancellationRequested) {
             // The call is cancelled by remote party
-            Unregister();
-            return;
+            mustSendInvalidation = false;
         }
         Unregister();
-        await SendInvalidation().ConfigureAwait(false);
+        if (mustSendInvalidation) {
+            var computeSystemCallSender = Hub.Services.GetRequiredService<RpcComputeSystemCallSender>();
+            await computeSystemCallSender.Invalidate(Context.Peer, Id, ResultHeaders).ConfigureAwait(false);
+        }
+    }
+}
+
+public sealed class RpcInboundComputeCall<TResult>(RpcInboundContext context, RpcMethodDef methodDef)
+    : RpcInboundComputeCall(context, methodDef)
+{
+    public Computed<TResult>? Computed { get; private set; }
+    public override Computed? UntypedComputed => Computed;
+
+#if NET5_0_OR_GREATER
+    protected override async Task<TResult> InvokeTarget()
+    {
+        var ccs = Fusion.Computed.BeginCapture();
+        try {
+            return await ((Task<TResult>)base.InvokeTarget()).ConfigureAwait(false);
+        }
+        finally {
+            var computed = ccs.Context.TryGetCaptured<TResult>();
+            if (computed != null) {
+                lock (Lock)
+                    Computed ??= computed;
+            }
+            ccs.Dispose();
+        }
+    }
+#else
+    protected override Task InvokeTarget()
+    {
+        return Implementation();
+
+        async Task<TResult> Implementation()
+        {
+            var ccs = Fusion.Computed.BeginCapture();
+            try {
+                return await ((Task<TResult>)base.InvokeTarget()).ConfigureAwait(false);
+            }
+            finally {
+                var computed = ccs.Context.TryGetCaptured<TResult>();
+                if (computed != null) {
+                    lock (Lock)
+                        Computed ??= computed;
+                }
+                ccs.Dispose();
+            }
+        }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    private Task SendInvalidation()
-    {
-        var computeSystemCallSender = Hub.Services.GetRequiredService<RpcComputeSystemCallSender>();
-        return computeSystemCallSender.Invalidate(Context.Peer, Id, ResultHeaders);
-    }
+#endif
+
+    protected override Task InvokeTarget(RpcInboundMiddlewares middlewares)
+        => DefaultInvokeTarget<TResult>(middlewares);
+
+    protected override Task SendResult()
+        => DefaultSendResult((Task<TResult>?)ResultTask);
 }

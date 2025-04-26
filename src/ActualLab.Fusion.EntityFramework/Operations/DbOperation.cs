@@ -6,8 +6,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ActualLab.Fusion.EntityFramework.Operations;
 
-#pragma warning disable IL2026
-
 [Table("_Operations")]
 [Index(nameof(Uuid), IsUnique = true)] // "Uuid -> Index" queries
 [Index(nameof(LoggedAt))] // "LoggedAt > minLoggedAt -> min(Index)" queries + min(LoggedAt)
@@ -16,8 +14,6 @@ public sealed class DbOperation : IDbIndexedLogEntry
     public static ITextSerializer Serializer { get; set; } = NewtonsoftJsonSerializer.Default;
 
     private long? _index;
-    private Symbol _hostId;
-    private DateTime _loggedAt;
 
     // DbOperations are never updated, but only deleted, so...
     long IDbLogEntry.Version { get => 0; set { } }
@@ -31,11 +27,11 @@ public sealed class DbOperation : IDbIndexedLogEntry
     [NotMapped] public bool HasIndex => _index.HasValue;
 
     public string Uuid { get; set; } = "";
-    public string HostId { get => _hostId; set => _hostId = value; }
+    public string HostId { get; set; } = "";
 
     public DateTime LoggedAt {
-        get => _loggedAt.DefaultKind(DateTimeKind.Utc);
-        set => _loggedAt = value.DefaultKind(DateTimeKind.Utc);
+        get => field.DefaultKind(DateTimeKind.Utc);
+        set => field = value.DefaultKind(DateTimeKind.Utc);
     }
 
     public string CommandJson { get; set; } = "";

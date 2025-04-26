@@ -1,14 +1,17 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ActualLab.Api.Internal;
 
-#pragma warning disable IL2026
-
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Used constructors should be there for sure.")]
 public class ApiArrayJsonConverter : JsonConverterFactory
 {
+    // TODO: Replace w/ GenericInstanceCache
     private static readonly ConcurrentDictionary<Type, JsonConverter?> ConverterCache = new();
 
     public override bool CanConvert(Type typeToConvert)
         => typeToConvert.IsGenericType && typeToConvert.GetGenericTypeDefinition() == typeof(ApiArray<>);
 
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume JSON converter code is preserved")]
     public override JsonConverter? CreateConverter(Type typeToConvert, JsonSerializerOptions options)
         => ConverterCache.GetOrAdd(typeToConvert, static t => {
             var canConvert = t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ApiArray<>);
@@ -20,10 +23,11 @@ public class ApiArrayJsonConverter : JsonConverterFactory
             return (JsonConverter)tConverter.CreateInstance();
         });
 
-    // Nested type
+    // Nested types
 
     public sealed class Converter<T> : JsonConverter<ApiArray<T>>
     {
+        [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume JSON converter code is preserved")]
         public override ApiArray<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             var valueConverter = (JsonConverter<T>)options.GetConverter(typeof(T));
@@ -40,6 +44,7 @@ public class ApiArrayJsonConverter : JsonConverterFactory
             throw new JsonException();
         }
 
+        [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume JSON converter code is preserved")]
         public override void Write(Utf8JsonWriter writer, ApiArray<T> value, JsonSerializerOptions options)
         {
             var valueConverter = (JsonConverter<T>)options.GetConverter(typeof(T));

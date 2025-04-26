@@ -1,10 +1,10 @@
-﻿using Microsoft.Toolkit.HighPerformance;
-using Samples.MultiServerRpc;
+﻿using Samples.MultiServerRpc;
 using ActualLab.Fusion.Server;
 using ActualLab.IO;
 using ActualLab.Rpc;
 using ActualLab.Rpc.Clients;
 using ActualLab.Rpc.Server;
+using CommunityToolkit.HighPerformance;
 using Microsoft.AspNetCore.Builder;
 using static System.Console;
 
@@ -50,7 +50,7 @@ async Task RunClient()
     var services = new ServiceCollection()
         .AddFusion(fusion => {
             fusion.Rpc.AddWebSocketClient(_ => new RpcWebSocketClient.Options() {
-                HostUrlResolver = (_, peer) => peer.Ref.Key.Value // peer.Ref.Id is the host URL in this sample
+                HostUrlResolver = (_, peer) => peer.Ref.Key // peer.Ref.Id is the host URL in this sample
             });
             fusion.AddClient<IChat>();
         })
@@ -59,11 +59,11 @@ async Task RunClient()
                 if (methodDef.Service.Type == typeof(IChat)) {
                     var arg0Type = args.GetType(0);
                     int hash;
-                    if (arg0Type == typeof(Symbol))
-                        // Contrary to string.GetHashCode, GetDjb2HashCode doesn't change run to run
-                        hash = args.Get<Symbol>(0).Value.GetDjb2HashCode();
+                    if (arg0Type == typeof(string))
+                        // Contrary to string.GetHashCode, GetXxHash3 doesn't change run to run
+                        hash = args.Get<string>(0).GetXxHash3();
                     else if (arg0Type == typeof(Chat_Post))
-                        hash = args.Get<Chat_Post>(0).ChatId.Value.GetDjb2HashCode();
+                        hash = args.Get<Chat_Post>(0).ChatId.GetXxHash3();
                     else
                         throw new NotSupportedException("Can't route this call.");
                     return clientPeerRefs[hash % serverCount];
@@ -74,7 +74,7 @@ async Task RunClient()
         .BuildServiceProvider();
 
     Write("Enter chat ID: ");
-    var chatId = new Symbol((await ConsoleExt.ReadLineAsync() ?? "").Trim());
+    var chatId = (await ConsoleExt.ReadLineAsync() ?? "").Trim();
     var chat = services.GetRequiredService<IChat>();
     var commander = services.Commander();
     _ = Task.Run(ObserveMessages);
@@ -96,11 +96,11 @@ async Task RunClient()
             foreach (var message in messages)
                 WriteLine($"- {message}");
         }
-    };
+    }
 
     async Task ObserveWordCount() {
         var cMessageCount = await Computed.Capture(() => chat.GetWordCount(chatId));
         await foreach (var (wordCount, _) in cMessageCount.Changes())
             WriteLine($"Word count changed: {wordCount}");
-    };
+    }
 }

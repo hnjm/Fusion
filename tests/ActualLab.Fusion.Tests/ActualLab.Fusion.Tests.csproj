@@ -12,29 +12,36 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Net.WebSockets.Client" />
+  </ItemGroup>
+
+  <ItemGroup Condition="!$(TargetFramework.StartsWith('net4'))">
+    <PackageReference Include="MemoryPack.Generator" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net9'))">
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="MySqlConnector" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" />
     <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="System.Net.WebSockets.Client" />
   </ItemGroup>
-
-  <ItemGroup Condition="!$(TargetFramework.StartsWith('net4'))">
-    <PackageReference Include="MemoryPack.Generator" />
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net8'))">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" VersionOverride="$(EntityFrameworkCoreVersion8)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" VersionOverride="$(EntityFrameworkCoreVersion8)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" VersionOverride="$(EntityFrameworkCoreVersion8)" />
+    <PackageReference Include="MySqlConnector" VersionOverride="$(MySqlConnectorVersion8)" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(EntityFrameworkCoreMySqlVersion8)" />
+    <PackageReference Include="System.Drawing.Common" VersionOverride="$(MicrosoftExtensionsVersion8)" />
   </ItemGroup>
-
   <ItemGroup Condition="$(TargetFramework.StartsWith('net7'))">
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" VersionOverride="$(EntityFrameworkCoreVersion7)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" VersionOverride="$(EntityFrameworkCoreVersion7)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" VersionOverride="$(EntityFrameworkCoreVersion7)" />
-    <!--
     <PackageReference Include="MySqlConnector" VersionOverride="$(MySqlConnectorVersion7)" />
-    -->
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(EntityFrameworkCoreMySqlVersion7)" />
-    <PackageReference Include="MySqlConnector" VersionOverride="$(MySqlConnectorVersion7)" />
-    <PackageReference Include="System.Drawing.Common" VersionOverride="$(SystemXxxVersion7)" />
+    <PackageReference Include="System.Drawing.Common" VersionOverride="$(MicrosoftExtensionsVersion7)" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.StartsWith('net6'))">
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" VersionOverride="$(EntityFrameworkCoreVersion6)" />
@@ -42,7 +49,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" VersionOverride="$(EntityFrameworkCoreVersion6)" />
     <PackageReference Include="MySqlConnector" VersionOverride="$(MySqlConnectorVersion6)" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(EntityFrameworkCoreMySqlVersion6)" />
-    <PackageReference Include="System.Drawing.Common" VersionOverride="$(SystemXxxVersion6)" />
+    <PackageReference Include="System.Drawing.Common" VersionOverride="$(MicrosoftExtensionsVersion6)" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.StartsWith('net5')) or $(TargetFramework.StartsWith('netcore'))">
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" VersionOverride="$(EntityFrameworkCoreVersion5)" />
@@ -50,7 +57,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" VersionOverride="$(EntityFrameworkCoreVersion5)" />
     <PackageReference Include="MySqlConnector" VersionOverride="$(MySqlConnectorVersion5)" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(EntityFrameworkCoreMySqlVersion5)" />
-    <PackageReference Include="System.Drawing.Common" VersionOverride="$(SystemXxxVersion5)" />
+    <PackageReference Include="System.Drawing.Common" VersionOverride="$(MicrosoftExtensionsVersion5)" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.StartsWith('net4'))">
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" VersionOverride="$(EntityFrameworkCoreVersion3)" />
@@ -58,7 +65,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" VersionOverride="$(EntityFrameworkCoreVersion3)" />
     <PackageReference Include="MySqlConnector" VersionOverride="$(MySqlConnectorVersion3)" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(EntityFrameworkCoreMySqlVersion3)" />
-    <PackageReference Include="System.Drawing.Common" VersionOverride="$(SystemXxxVersion5)" />
+    <PackageReference Include="System.Drawing.Common" VersionOverride="$(MicrosoftExtensionsVersion5)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -71,9 +78,6 @@
     <ProjectReference Include="..\..\src\ActualLab.Testing\ActualLab.Testing.csproj" />
     <ProjectReference Include="..\ActualLab.Tests\ActualLab.Tests.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\ActualLab.Generators\ActualLab.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-  </ItemGroup>
   <ItemGroup Condition="!$(TargetFramework.StartsWith('net4'))">
     <ProjectReference Include="..\..\src\ActualLab.Fusion.Blazor\ActualLab.Fusion.Blazor.csproj" />
     <ProjectReference Include="..\..\src\ActualLab.Fusion.Blazor.Authentication\ActualLab.Fusion.Blazor.Authentication.csproj" />
@@ -81,6 +85,9 @@
   </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.StartsWith('net4'))">
     <ProjectReference Include="..\..\src\ActualLab.Fusion.Server.NetFx\ActualLab.Fusion.Server.NetFx.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ActualLab.Generators\ActualLab.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

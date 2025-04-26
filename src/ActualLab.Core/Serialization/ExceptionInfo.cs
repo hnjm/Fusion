@@ -1,11 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
-using ActualLab.Internal;
+using MessagePack;
 using Errors = ActualLab.Serialization.Internal.Errors;
 
 namespace ActualLab.Serialization;
 
 [StructLayout(LayoutKind.Auto)]
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 public readonly partial struct ExceptionInfo : IEquatable<ExceptionInfo>
 {
     private static readonly Type[] ExceptionCtorArgumentTypes1 = { typeof(string), typeof(Exception) };
@@ -14,41 +14,36 @@ public readonly partial struct ExceptionInfo : IEquatable<ExceptionInfo>
     public static readonly ExceptionInfo None = default;
     public static Func<TypeRef, Type>? UnknownExceptionTypeResolver { get; set; } = null;
 
-    private readonly string _message;
-
     [DataMember(Order = 0), MemoryPackOrder(0)]
     public TypeRef TypeRef { get; }
     [DataMember(Order = 1), MemoryPackOrder(1)]
-    public string Message => _message ?? "";
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
-    public bool IsNone => TypeRef.AssemblyQualifiedName.IsEmpty;
+    public string Message => field ?? "";
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
+    public bool IsNone => TypeRef.AssemblyQualifiedName.IsNullOrEmpty();
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public ExceptionInfo(TypeRef typeRef, string? message)
     {
         TypeRef = typeRef;
-        _message = message ?? "";
+        Message = message ?? "";
     }
 
     public ExceptionInfo(Exception? exception)
     {
         if (exception == null) {
             TypeRef = default;
-            _message = "";
+            Message = "";
         } else {
             TypeRef = new TypeRef(exception.GetType()).WithoutAssemblyVersions();
-            _message = exception.Message;
+            Message = exception.Message;
         }
     }
 
     public override string ToString()
         => IsNone
             ? $"{GetType().Name}()"
-#pragma warning disable IL2026
             : $"{GetType().Name}({TypeRef.ToString()}, {JsonFormatter.Format(Message)})";
-#pragma warning restore IL2026
 
-    [RequiresUnreferencedCode(UnreferencedCode.Reflection)]
     public Exception? ToException()
     {
         if (IsNone)
@@ -83,7 +78,9 @@ public readonly partial struct ExceptionInfo : IEquatable<ExceptionInfo>
 
     // Private methods
 
-    [RequiresUnreferencedCode(UnreferencedCode.Reflection)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "The method returns null in case the exception can't be constructed")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "The method returns null in case the exception can't be constructed")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "The method returns null in case the exception can't be constructed")]
     private static Exception? TryCreateException(ExceptionInfo exceptionInfo)
     {
         if (exceptionInfo.IsNone)
@@ -112,6 +109,11 @@ public readonly partial struct ExceptionInfo : IEquatable<ExceptionInfo>
         if (!string.Equals("message", parameter?.Name ?? "", StringComparison.Ordinal))
             return null;
 
-        return (Exception)type.CreateInstance(message);
+        try {
+            return (Exception)type.CreateInstance(message);
+        }
+        catch {
+            return null;
+        }
     }
 }

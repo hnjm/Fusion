@@ -1,17 +1,17 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.CommandR.Internal;
 
 namespace ActualLab.CommandR.Diagnostics;
 
 public class CommandTracer(IServiceProvider services) : ICommandHandler<ICommand>
 {
-    private ILogger? _log;
-
     protected IServiceProvider Services { get; } = services;
 
+    [field: AllowNull, MaybeNull]
     protected ILogger Log {
-        get => _log ??= Services.LogFor(GetType());
-        init => _log = value;
+        get => field ??= Services.LogFor(GetType());
+        init;
     }
 
     public LogLevel ErrorLogLevel { get; init; } = LogLevel.Error;
@@ -24,12 +24,12 @@ public class CommandTracer(IServiceProvider services) : ICommandHandler<ICommand
             return;
         }
 
-        var activity = StartActivity(command, context);
+        using var activity = StartActivity(command, context);
         try {
             await context.InvokeRemainingHandlers(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception e) {
-            if (activity == null)
+            if (activity == null || !ActivityExt.IsError(e))
                 throw;
 
             activity.Finalize(e, cancellationToken);

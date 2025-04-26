@@ -1,9 +1,10 @@
 using System.Security;
 using ActualLab.Versioning;
+using MessagePack;
 
 namespace ActualLab.Fusion.Authentication;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 public partial record SessionInfo : SessionAuthInfo, IHasVersion<long>
 {
     public static new Requirement<SessionInfo> MustBeAuthenticated { get; set; } = Requirement.New(
@@ -13,17 +14,25 @@ public partial record SessionInfo : SessionAuthInfo, IHasVersion<long>
     [DataMember(Order = 10), MemoryPackOrder(10)] public long Version { get; init; }
     [DataMember(Order = 11), MemoryPackOrder(11)] public Moment CreatedAt { get; init; }
     [DataMember(Order = 12), MemoryPackOrder(12)] public Moment LastSeenAt { get; init; }
-    [DataMember(Order = 13), MemoryPackOrder(13)] public string IPAddress { get; init; } = "";
-    [DataMember(Order = 14), MemoryPackOrder(14)] public string UserAgent { get; init; } = "";
+    [DataMember(Order = 13), MemoryPackOrder(13)] public string IPAddress { get => field ?? ""; init; }
+    [DataMember(Order = 14), MemoryPackOrder(14)] public string UserAgent { get => field ?? ""; init; }
     [DataMember(Order = 15), MemoryPackOrder(15)] public ImmutableOptionSet Options { get; init; }
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
-    public SessionInfo() { }
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
+    public SessionInfo()
+    {
+        IPAddress = "";
+        UserAgent = "";
+    }
+
     public SessionInfo(Moment createdAt) : this(null, createdAt) { }
+
     public SessionInfo(Session? session, Moment createdAt = default) : base(session)
     {
         CreatedAt = createdAt;
         LastSeenAt = createdAt;
+        IPAddress = "";
+        UserAgent = "";
     }
 
     public SessionAuthInfo ToAuthInfo()

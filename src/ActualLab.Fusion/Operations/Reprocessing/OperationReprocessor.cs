@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Fusion.Operations.Internal;
 using ActualLab.Resilience;
 using Errors = ActualLab.Internal.Errors;
@@ -10,9 +11,9 @@ namespace ActualLab.Fusion.Operations.Reprocessing;
 /// </summary>
 public interface IOperationReprocessor : ICommandHandler<ICommand>
 {
-    void MarkTransient(Exception error, Transiency transiency);
-    Transiency GetTransiency(IReadOnlyList<Exception> allErrors);
-    bool WillRetry(IReadOnlyList<Exception> allErrors, out Transiency transiency);
+    public void MarkTransient(Exception error, Transiency transiency);
+    public Transiency GetTransiency(IReadOnlyList<Exception> allErrors);
+    public bool WillRetry(IReadOnlyList<Exception> allErrors, out Transiency transiency);
 }
 
 /// <summary>
@@ -45,20 +46,22 @@ public class OperationReprocessor : IOperationReprocessor
         }
     }
 
-    private TransiencyResolver<IOperationReprocessor>? _transiencyResolver;
-    private MomentClock? _delayClock;
-    private ILogger? _log;
-
     protected Dictionary<Exception, Transiency> KnownTransiencies { get; } = new();
     protected CommandContext CommandContext { get; set; } = null!;
     protected int TryIndex { get; set; }
     protected Exception? LastError { get; set; }
 
     protected IServiceProvider Services { get; }
+
+    [field: AllowNull, MaybeNull]
     protected TransiencyResolver<IOperationReprocessor> TransiencyResolver
-        => _transiencyResolver ??= Services.TransiencyResolver<IOperationReprocessor>();
-    public MomentClock DelayClock => _delayClock ??= Settings.DelayClock ?? Services.Clocks().CpuClock;
-    protected ILogger Log => _log ??= Services.LogFor(GetType());
+        => field ??= Services.TransiencyResolver<IOperationReprocessor>();
+
+    [field: AllowNull, MaybeNull]
+    public MomentClock DelayClock => field ??= Settings.DelayClock ?? Services.Clocks().CpuClock;
+
+    [field: AllowNull, MaybeNull]
+    protected ILogger Log => field ??= Services.LogFor(GetType());
 
     public Options Settings { get; }
 
@@ -131,7 +134,7 @@ public class OperationReprocessor : IOperationReprocessor
                 $"{GetType().GetName()} cannot be used more than once in the same command execution pipeline.");
         CommandContext = context;
 
-        context.Items.Set((IOperationReprocessor)this);
+        context.Items.KeylessSet((IOperationReprocessor)this);
         var itemsBackup = context.Items.Snapshot;
         var executionStateBackup = context.ExecutionState;
         while (true) {

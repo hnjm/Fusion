@@ -4,12 +4,17 @@ using ActualLab.Internal;
 
 namespace ActualLab.Conversion.Internal;
 
+[UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume SourceConverterProvider's methods are preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "We assume SourceConverterProvider's methods are preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume SourceConverterProvider's methods are preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume SourceConverterProvider's methods are preserved")]
 public class DefaultSourceConverterProvider<TSource>(IServiceProvider services) : SourceConverterProvider<TSource>
 {
     private readonly ConcurrentDictionary<Type, Converter> _cache = new();
 
     protected IServiceProvider Services { get; } = services;
 
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(DefaultSourceConverterProvider<>))]
     public override Converter<TSource> To(Type targetType)
         => (Converter<TSource>) _cache.GetOrAdd(targetType, static (targetType1, self) => {
             var mGetConverter = self.GetType()

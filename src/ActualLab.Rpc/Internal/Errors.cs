@@ -10,7 +10,7 @@ public static class Errors
 
     public static Exception ServiceTypeConflict(Type serviceType)
         => new InvalidOperationException($"Service '{serviceType.GetName()}' is already registered.");
-    public static Exception ServiceNameConflict(Type serviceType1, Type serviceType2, Symbol serviceName)
+    public static Exception ServiceNameConflict(Type serviceType1, Type serviceType2, string serviceName)
         => new InvalidOperationException($"Services '{serviceType1.GetName()}' and '{serviceType2.GetName()}' have the same name '{serviceName}'.");
     public static Exception MethodNameConflict(RpcMethodDef methodDef)
         => new InvalidOperationException($"Service '{methodDef.Service.Type.GetName()}' has 2 or more methods named '{methodDef.Name}'.");
@@ -52,14 +52,22 @@ public static class Errors
         => new SerializationException("The item size exceeds the limit.");
     public static Exception InvalidItemSize()
         => new SerializationException("Invalid item size. The remainder of the message will be dropped.");
+    public static Exception InvalidItemTypeFormat()
+        => new SerializationException("Invalid item type format.");
+    public static Exception CannotSerializeAbstractType(Type type)
+        => new SerializationException($"Cannot serialize abstract type '{type.GetName()}'.");
+    public static Exception CannotDeserializeInboundCallArguments(Exception innerException)
+        => new SerializationException("Cannot deserialize inbound call arguments.", innerException);
     public static Exception CannotDeserializeUnexpectedArgumentType(Type expectedType, Type actualType)
         => new SerializationException($"Cannot deserialize unexpected argument type: " +
             $"expected '{expectedType.GetName()}' (exact match), got '{actualType.GetName()}'.");
     public static Exception CannotDeserializeUnexpectedPolymorphicArgumentType(Type expectedType, Type actualType)
         => new SerializationException($"Cannot deserialize polymorphic argument type: " +
             $"expected '{expectedType.GetName()}' or its descendant, got '{actualType.GetName()}'.");
-    public static Exception InvalidSerializedDataFormat()
-        => new SerializationException("Invalid serialized data format.");
+    public static Exception InvalidResultType(Type expectedType, object? actualResult)
+        => new SerializationException(
+            $"Got invalid RPC call result type: " +
+            $"expected '{expectedType.GetName()}', got '{actualResult?.GetType().GetName() ?? "null"}'.");
 
     public static Exception ConnectTimeout(RpcPeerRef peerRef, TimeSpan? timeout = null)
         => ConnectTimeout(peerRef.GetRemotePartyName());
@@ -79,9 +87,9 @@ public static class Errors
                 : $"The {remoteParty} didn't respond in time.");
 
     public static Exception HandshakeTimeout()
-        => new TimeoutException("Timeout while waiting for handshake.");
+        => new TimeoutException("Timeout while waiting for RPC handshake.");
     public static Exception KeepAliveTimeout()
-        => new TimeoutException("Timeout while waiting for \"keep-alive\" message.");
+        => new TimeoutException("Timeout while waiting for RPC keep-alive.");
 
     public static Exception ClientRpcPeerRefExpected(string argumentName)
         => new ArgumentOutOfRangeException(argumentName, "Client RpcPeerRef is expected.");
@@ -113,4 +121,8 @@ public static class Errors
     public static Exception NoRemoteCallInvoker()
         => new InvalidOperationException(
             $"{nameof(RpcSwitchInterceptor)} is misconfigured: it can't route remote calls.");
+
+    public static Exception GotRpcRerouteExceptionFromRemotePeer()
+        => new InvalidOperationException(
+            "Got RpcRerouteException from remote peer, which should never happen.");
 }

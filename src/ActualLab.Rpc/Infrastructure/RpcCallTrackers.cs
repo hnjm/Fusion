@@ -2,26 +2,24 @@ using System.Diagnostics.CodeAnalysis;
 using ActualLab.OS;
 using ActualLab.Rpc.Internal;
 using Errors = ActualLab.Internal.Errors;
-using UnreferencedCode = ActualLab.Internal.UnreferencedCode;
 
 namespace ActualLab.Rpc.Infrastructure;
 
 public abstract class RpcCallTracker<TRpcCall> : IEnumerable<TRpcCall>
     where TRpcCall : RpcCall
 {
-    private RpcPeer _peer = null!;
     protected RpcLimits Limits { get; private set; } = null!;
-    protected readonly ConcurrentDictionary<long, TRpcCall> Calls
-        = new(HardwareInfo.GetProcessorCountFraction(2), 127);
+    protected readonly ConcurrentDictionary<long, TRpcCall> Calls = new(HardwareInfo.ProcessorCountPo2, 131);
 
+    [field: AllowNull, MaybeNull]
     public RpcPeer Peer {
-        get => _peer;
+        get;
         protected set {
-            if (_peer != null)
+            if (field != null)
                 throw Errors.AlreadyInitialized(nameof(Peer));
 
-            _peer = value;
-            Limits = _peer.Hub.Limits;
+            field = value;
+            Limits = field.Hub.Limits;
         }
     }
 
@@ -60,8 +58,7 @@ public sealed class RpcInboundCallTracker : RpcCallTracker<RpcInboundCall>
 
 public sealed class RpcOutboundCallTracker : RpcCallTracker<RpcOutboundCall>
 {
-    private readonly ConcurrentDictionary<long, RpcOutboundCall> _inProgressCalls
-        = new(HardwareInfo.GetProcessorCountFraction(2), 127);
+    private readonly ConcurrentDictionary<long, RpcOutboundCall> _inProgressCalls = new(HardwareInfo.ProcessorCountPo2, 131);
     private long _lastId;
 
     public int InProgressCallCount => _inProgressCalls.Count;
@@ -74,25 +71,20 @@ public sealed class RpcOutboundCallTracker : RpcCallTracker<RpcOutboundCall>
         if (call.Id != 0)
             throw new ArgumentOutOfRangeException(nameof(call), "call.Id != 0.");
 
-        while (true) {
-            call.Id = Interlocked.Increment(ref _lastId);
-            if (Calls.TryAdd(call.Id, call)) {
-                // Also register an in-progress call
-                call.StartedAt = CpuTimestamp.Now;
-                _inProgressCalls.TryAdd(call.Id, call);
-                return;
-            }
-        }
+        call.Id = Interlocked.Increment(ref _lastId);
+        call.StartedAt = CpuTimestamp.Now;
+        Calls.TryAdd(call.Id, call); // Must succeed for unique call.Id
+            _inProgressCalls.TryAdd(call.Id, call);  // Must succeed for unique call.Id
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Complete(RpcOutboundCall call)
+    public bool CompleteKeepRegistered(RpcOutboundCall call)
         => _inProgressCalls.TryRemove(call.Id, call);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Unregister(RpcOutboundCall call)
         => Calls.TryRemove(call.Id, call);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void TryReroute()
     {
         foreach (var call in this)
@@ -100,30 +92,59 @@ public sealed class RpcOutboundCallTracker : RpcCallTracker<RpcOutboundCall>
                 call.SetRerouteError();
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public async Task Maintain(RpcHandshake handshake, CancellationToken cancellationToken)
     {
+        var lastSummaryReportAt = CpuTimestamp.Now;
         try {
             // This loop aborts timed out calls every CallTimeoutCheckPeriod
             while (!cancellationToken.IsCancellationRequested) {
+                var callCount = 0;
+                var inProgressCallCount = 0;
                 foreach (var call in this) {
-                    if (call.UntypedResultTask.IsCompleted)
+                    callCount++;
+                    if (call.ResultTask.IsCompleted)
                         continue;
 
+                    inProgressCallCount++;
                     var timeouts = call.MethodDef.Timeouts;
                     var startedAt = call.StartedAt;
                     if (startedAt == default)
                         continue; // Something is off: call.StartedAt wasn't set
-                    if (startedAt.Elapsed <= timeouts.Timeout)
+
+                    var elapsed = startedAt.Elapsed;
+                    if (elapsed <= timeouts.Timeout)
                         continue;
 
-                    var error = Internal.Errors.CallTimeout(Peer.Ref, timeouts.Timeout);
+                    Exception? error = null;
                     // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
-                    if ((timeouts.TimeoutAction & RpcCallTimeoutAction.Log) != 0)
-                        Peer.Log.LogError(error, "{PeerRef}': {Message}", Peer.Ref, error.Message);
-                    // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
-                    if ((timeouts.TimeoutAction & RpcCallTimeoutAction.Throw) != 0)
+                    if ((timeouts.TimeoutAction & RpcCallTimeoutAction.Throw) != 0) {
+                        error = Internal.Errors.CallTimeout(Peer.Ref, timeouts.Timeout);
                         call.SetError(error, context: null, assumeCancelled: false);
+                    }
+                    else {
+                        // Reset StartedAt to make sure it won't pop up every time we're here
+                        call.StartedAt = CpuTimestamp.Now;
+                    }
+                    // ReSharper disable once BitwiseOperatorOnEnumWithoutFlags
+                    if ((timeouts.TimeoutAction & RpcCallTimeoutAction.Log) != 0) {
+                        if (error != null)
+                            Peer.Log.LogError(error,
+                                "{PeerRef}': call {Call} is timed out ({Elapsed} > {Timeout})",
+                                Peer.Ref, call, elapsed.ToShortString(), timeouts.Timeout.ToShortString());
+                        else
+                            Peer.Log.LogWarning(
+                                "{PeerRef}': call {Call} took {Elapsed} from its start or previous report here",
+                                Peer.Ref, call, elapsed.ToShortString());
+                    }
+                }
+
+                var summaryLogSettings = Limits.LogOutboundCallSummarySettings;
+                if (lastSummaryReportAt.Elapsed > summaryLogSettings.Period
+                    && callCount > summaryLogSettings.MinCount) {
+                    lastSummaryReportAt = CpuTimestamp.Now;
+                    Peer.Log.LogInformation(
+                        "{PeerRef}': Tracking {CallCount} outbound calls (in progress: {InProgressCallCount})",
+                        Peer.Ref, callCount, inProgressCallCount);
                 }
 
                 await Task.Delay(Limits.CallTimeoutCheckPeriod.Next(), cancellationToken).ConfigureAwait(false);
@@ -134,7 +155,6 @@ public sealed class RpcOutboundCallTracker : RpcCallTracker<RpcOutboundCall>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public async Task Reconnect(RpcHandshake handshake, bool isPeerChanged, CancellationToken cancellationToken)
     {
         try {
@@ -189,15 +209,14 @@ public sealed class RpcOutboundCallTracker : RpcCallTracker<RpcOutboundCall>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    public async Task Abort(Exception error)
+    public async Task Abort(Exception error, bool assumeCancelled)
     {
         var abortedCallIds = new HashSet<long>();
         for (int i = 0;; i++) {
             var abortedCallCountBefore = abortedCallIds.Count;
             foreach (var call in this) {
                 if (abortedCallIds.Add(call.Id))
-                    call.SetError(error, context: null, assumeCancelled: true);
+                    call.SetError(error, context: null, assumeCancelled);
             }
             if (i >= 2 && abortedCallCountBefore == abortedCallIds.Count)
                 break;

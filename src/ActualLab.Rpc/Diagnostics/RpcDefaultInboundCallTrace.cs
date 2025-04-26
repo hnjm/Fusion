@@ -9,20 +9,20 @@ public sealed class RpcDefaultInboundCallTrace(RpcDefaultCallTracer tracer, Acti
     public override void Complete(RpcInboundCall call)
     {
         if (Activity != null) {
-            var untypedResultTask = call.UntypedResultTask;
+            var untypedResultTask = call.ResultTask;
             if (untypedResultTask == null) {
                 StaticLog.For(typeof(RpcDefaultInboundCallTrace)).LogError("Call doesn't have ResultTask yet");
                 untypedResultTask = Task.CompletedTask;
             }
 
             Activity.Finalize(untypedResultTask, call.CallCancelToken);
-            Activity.Dispose();
+            Activity.DisposeNonCurrent();
         }
 
         var callStats = new RpcCallSummary(call);
-        if (tracer.InboundCallCounter.Enabled)
+        if (tracer.IsEnabled)
             tracer.RegisterInboundCall(callStats);
-        if (RpcInstruments.InboundCallCounter.Enabled)
+        if (RpcInstruments.IsEnabled)
             RpcInstruments.RegisterInboundCall(callStats);
     }
 }

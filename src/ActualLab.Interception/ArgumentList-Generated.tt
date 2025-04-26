@@ -1,17 +1,13 @@
 <#@ template debug="false" hostspecific="true" language="C#" #>
 <#@ output extension=".cs" encoding="utf-8" #>
 <#@ assembly Name="System.Core.dll" #>
-<#@ assembly Name="System.Xml.dll" #>
-<#@ assembly Name="System.Xml.Linq.dll" #>
 <#@ import namespace="System" #>
-<#@ import namespace="System.IO" #>
 <#@ import namespace="System.Collections.Generic" #>
-<#@ import namespace="System.Xml.Linq" #>
 <#@ import namespace="System.Linq" #>
 <#@ import namespace="System.Text" #>
 <#
     const int maxItemCount = 10;
-    const int maxGenericItemCount = 5;
+    const int maxGenericItemCount = 4;
 
     IEnumerable<int> AllBut(int count, int exceptIndex, int startIndex = 0)
     {
@@ -50,15 +46,20 @@
 // ReSharper disable ArrangeConstructorOrDestructorBody
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Numerics;
 using System.Reflection.Emit;
 using ActualLab.Internal;
+using MessagePack;
 
 namespace ActualLab.Interception;
 
 #pragma warning disable MA0012
 #pragma warning disable CA2201, CS0219
-#pragma warning disable IL2046
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract partial record ArgumentList
 {
     public const int MaxItemCount = <#=maxItemCount#>;
@@ -94,7 +95,7 @@ public abstract partial record ArgumentList
 #>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<<#=itemTypes#>>(<#=itemDefs#>)
-        => AllowGenerics
+        => (UseGenerics && !DisableGenerics)
             ? new <#=GenericTypeName(itemCount, true)#>(<#=itemCount > maxGenericItemCount ? argListDefPrefix : ""#><#=items#>)
             : new <#=SimpleTypeName(itemCount)#>(<#=argListDefPrefix#><#=items#>);
 <# } #>
@@ -103,6 +104,7 @@ public abstract partial record ArgumentList
     for (var t = 0; t < maxItemCount; t++) {
 #>
     public virtual T Get<#=t#><T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get<#=t#>Untyped() => throw new IndexOutOfRangeException();
 <#
     }
 #>
@@ -110,9 +112,13 @@ public abstract partial record ArgumentList
 
 <# for (var itemCount = 1; itemCount <= maxItemCount; itemCount++) {
 #>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList<#=itemCount#> : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => <#=itemCount#>;
 
     protected static Type?[] CreateNonDefaultItemTypes()
@@ -142,6 +148,10 @@ public abstract record ArgumentList<#=itemCount#> : ArgumentList
 
        string TypeOf(int i) => i < genericItemCount ? $"T{i}" : "object?";
 #>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record <#=className#> : ArgumentList<#=itemCount#>
 {
 <# if (simpleItemCount == 0) { #>
@@ -302,6 +312,8 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
     for (var t = 0; t < itemCount; t++) {
 #>
     public override T Get<#=t#><T>() => Item<#=t#> is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get<#=t#>Untyped() => Item<#=t#>;
 <#
     }
 #>
@@ -328,7 +340,7 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
 <# for (var t = 0; t < itemCount; t++) { #>
             <#=t#> => Item<#=t#> is CancellationToken value ? value : default!,
 <# } #>
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -377,10 +389,8 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
 <# } else { #>
             _item<#=t#> = _type.CastItem(<#=t#>, item);
 <# } #>
-            break;
+            return;
 <# } #>
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
         }
     }
 
@@ -500,7 +510,6 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
 <# if (simpleItemCount != 0) { #>
@@ -518,7 +527,6 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
 <# } #>
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
 <# if (simpleItemCount != 0) { #>
@@ -580,7 +588,11 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
 <# if (t == 0) { #>
             var hashCode =
 <# } else { #>
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, <#= t * 13 % 32 #>) +
+#else
             hashCode = 397*hashCode +
+#endif
 <# } #>
                 (Item<#=t#> is { } item<#=t#> ? item<#=t#>.GetHashCode() : 0);
 <# } #>
@@ -595,7 +607,11 @@ public sealed record <#=className#> : ArgumentList<#=itemCount#>
 <# if (t == 0) { #>
             var hashCode =
 <# } else { #>
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, <#= t * 13 % 32 #>) +
+#else
             hashCode = 397*hashCode +
+#endif
 <# } #>
                 (skipIndex == <#=t#> ? 0 : (Item<#=t#> is { } item<#=t#> ? item<#=t#>.GetHashCode() : 0));
 <# } #>

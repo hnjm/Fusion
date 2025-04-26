@@ -3,6 +3,8 @@ using ActualLab.Interception.Interceptors;
 
 namespace ActualLab.Interception;
 
+[UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume proxy-related code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume proxy-related code is preserved")]
 public static class ServiceCollectionExt
 {
     // TypeViewFactory
@@ -56,9 +58,7 @@ public static class ServiceCollectionExt
         services.Add(new ServiceDescriptor(factoryType, c => {
             var factoryProxyType = Proxies.GetProxyType(factoryType);
             var interceptor = (Interceptor)c.GetServiceOrCreateInstance(interceptorType);
-#pragma warning disable IL2072
             var proxy = (IProxy)c.GetServiceOrCreateInstance(factoryProxyType);
-#pragma warning restore IL2072
             interceptor.BindTo(proxy);
             return proxy;
         }, lifetime));

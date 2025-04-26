@@ -1,6 +1,9 @@
 namespace ActualLab.Rpc;
 
-public partial record RpcPeerRef(Symbol Key, bool IsServer = false, bool IsBackend = false)
+public partial record RpcPeerRef(
+    string Key,
+    bool IsServer = false,
+    bool IsBackend = false)
 {
     // private static readonly CancellationTokenSource FakeGoneCts = new();
     public virtual CancellationToken RerouteToken => default;
@@ -15,11 +18,6 @@ public partial record RpcPeerRef(Symbol Key, bool IsServer = false, bool IsBacke
         get => RerouteToken.IsCancellationRequested;
     }
 
-    public static RpcPeerRef NewServer(Symbol key, bool isBackend = false)
-        => new(key, true, isBackend);
-    public static RpcPeerRef NewClient(Symbol key, bool isBackend = false)
-        => new(key, false, isBackend);
-
     public override string ToString()
     {
         var result = $"{(IsBackend ? "backend-" : "")}{(IsServer ? "server" : "client")}:{Key}";
@@ -28,18 +26,25 @@ public partial record RpcPeerRef(Symbol Key, bool IsServer = false, bool IsBacke
         return result;
     }
 
-    public virtual VersionSet GetVersions()
-        => IsBackend ? RpcDefaults.BackendPeerVersions : RpcDefaults.ApiPeerVersions;
+    public string GetSerializationFormatKey()
+    {
+        var delimiterIndex = Key.LastIndexOf('$');
+        return delimiterIndex >= 0
+            ? Key.Substring(delimiterIndex + 1)
+            : "";
+    }
 
     public virtual RpcPeerConnectionKind GetConnectionKind(RpcHub hub)
     {
-        var key = Key.Value;
-        return key.StartsWith(LocalKeyPrefix, StringComparison.Ordinal)
+        return Key.StartsWith(LocalKeyPrefix, StringComparison.Ordinal)
             ? RpcPeerConnectionKind.Local
-            : key.StartsWith(LoopbackKeyPrefix, StringComparison.Ordinal)
+            : Key.StartsWith(LoopbackKeyPrefix, StringComparison.Ordinal)
                 ? RpcPeerConnectionKind.Loopback
                 : RpcPeerConnectionKind.Remote;
     }
+
+    public virtual VersionSet GetVersions()
+        => IsBackend ? RpcDefaults.BackendPeerVersions : RpcDefaults.ApiPeerVersions;
 
     public async Task WhenRerouted()
         => await TaskExt.NewNeverEndingUnreferenced().WaitAsync(RerouteToken).SilentAwait(false);

@@ -4,9 +4,13 @@ namespace ActualLab.Redis;
 
 public class RedisConnector
 {
+#if NET9_0_OR_GREATER
+    protected readonly Lock Lock = new();
+#else
     protected readonly object Lock = new();
+#endif
     protected readonly Func<Task<IConnectionMultiplexer>> MultiplexerFactory;
-    protected volatile AsyncState<Task<Temporary<IConnectionMultiplexer>>?> State = new(null, false);
+    protected volatile AsyncState<Task<Temporary<IConnectionMultiplexer>>?> State = new(null);
     protected volatile CancellationTokenSource? GoneTokenSource;
 
     public RetryDelaySeq ReconnectDelays { get; init; } = RetryDelaySeq.Exp(0.5, 3, 0.33);
@@ -52,7 +56,7 @@ public class RedisConnector
                 if (!multiplexerTask.IsCompletedSuccessfully())
                     return;
 
-                var (multiplexer, _) = multiplexerTask.Result;
+                var (multiplexer, _) = multiplexerTask.GetAwaiter().GetResult();
                 if (failedMultiplexer != null && !ReferenceEquals(failedMultiplexer, multiplexer))
                     return;
             }

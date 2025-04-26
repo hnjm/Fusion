@@ -1,28 +1,30 @@
+using MessagePack;
+
 namespace ActualLab.Fusion.Authentication;
 
 public interface IAuth : IComputeService
 {
     // Commands
     [CommandHandler]
-    Task SignOut(Auth_SignOut command, CancellationToken cancellationToken = default);
+    public Task SignOut(Auth_SignOut command, CancellationToken cancellationToken = default);
     [CommandHandler]
-    Task EditUser(Auth_EditUser command, CancellationToken cancellationToken = default);
-    Task UpdatePresence(Session session, CancellationToken cancellationToken = default);
+    public Task EditUser(Auth_EditUser command, CancellationToken cancellationToken = default);
+    public Task UpdatePresence(Session session, CancellationToken cancellationToken = default);
 
     // Queries
     [ComputeMethod(MinCacheDuration = 10)]
-    Task<bool> IsSignOutForced(Session session, CancellationToken cancellationToken = default);
+    public Task<bool> IsSignOutForced(Session session, CancellationToken cancellationToken = default);
     [ComputeMethod(MinCacheDuration = 10)]
-    Task<SessionAuthInfo?> GetAuthInfo(Session session, CancellationToken cancellationToken = default);
+    public Task<SessionAuthInfo?> GetAuthInfo(Session session, CancellationToken cancellationToken = default);
     [ComputeMethod(MinCacheDuration = 10)]
-    Task<SessionInfo?> GetSessionInfo(Session session, CancellationToken cancellationToken = default);
+    public Task<SessionInfo?> GetSessionInfo(Session session, CancellationToken cancellationToken = default);
     [ComputeMethod(MinCacheDuration = 10)]
-    Task<User?> GetUser(Session session, CancellationToken cancellationToken = default);
+    public Task<User?> GetUser(Session session, CancellationToken cancellationToken = default);
     [ComputeMethod]
-    Task<ImmutableArray<SessionInfo>> GetUserSessions(Session session, CancellationToken cancellationToken = default);
+    public Task<ImmutableArray<SessionInfo>> GetUserSessions(Session session, CancellationToken cancellationToken = default);
 }
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 // ReSharper disable once InconsistentNaming
 public partial record AuthBackend_SetSessionOptions(
     [property: DataMember, MemoryPackOrder(0)] Session Session,
@@ -30,19 +32,19 @@ public partial record AuthBackend_SetSessionOptions(
     [property: DataMember, MemoryPackOrder(2)] long? ExpectedVersion = null
 ) : ISessionCommand<Unit>;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 // ReSharper disable once InconsistentNaming
 public partial record Auth_EditUser(
     [property: DataMember, MemoryPackOrder(0)] Session Session,
     [property: DataMember, MemoryPackOrder(1)] string? Name
 ) : ISessionCommand<Unit>;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 // ReSharper disable once InconsistentNaming
 public partial record Auth_SignOut: ISessionCommand<Unit>
 {
     [DataMember, MemoryPackOrder(0)]
-    public Session Session { get; init; } = null!;
+    public Session Session { get; init; }
     [DataMember, MemoryPackOrder(1)]
     public string? KickUserSessionHash { get; init; }
     [DataMember, MemoryPackOrder(2)]
@@ -63,7 +65,8 @@ public partial record Auth_SignOut: ISessionCommand<Unit>
         Force = force;
     }
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+    // ReSharper disable once ConvertToPrimaryConstructor
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public Auth_SignOut(
         Session session,
         string? kickUserSessionHash,

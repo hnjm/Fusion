@@ -1,10 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Diagnostics;
 using ActualLab.Locking;
 using ActualLab.RestEase;
 using ActualLab.Rpc;
 using ActualLab.Rpc.Clients;
 using ActualLab.Rpc.Infrastructure;
-using ActualLab.Rpc.Serialization;
 using ActualLab.Rpc.WebSockets;
 using ActualLab.Testing.Collections;
 using ActualLab.Time.Testing;
@@ -14,7 +14,7 @@ using Xunit.DependencyInjection.Logging;
 namespace ActualLab.Tests;
 
 [Collection(nameof(TimeSensitiveTests)), Trait("Category", nameof(TimeSensitiveTests))]
-public abstract class RpcTestBase(ITestOutputHelper @out) : TestBase(@out), IAsyncLifetime
+public abstract class RpcTestBase(ITestOutputHelper @out) : TestBase(@out)
 {
     private static readonly AsyncLock InitializeLock = new(LockReentryMode.CheckedFail);
     protected static readonly RpcPeerRef ClientPeerRef = RpcPeerRef.GetDefaultPeerRef();
@@ -22,13 +22,10 @@ public abstract class RpcTestBase(ITestOutputHelper @out) : TestBase(@out), IAsy
 
     private IServiceProvider? _services;
     private IServiceProvider? _clientServices;
-    private RpcWebHost? _webHost;
-    private ILogger? _log;
 
     public RpcPeerConnectionKind ConnectionKind { get; init; } = RpcPeerConnectionKind.Remote;
     public RpcFrameDelayerFactory? RpcFrameDelayerFactory { get; set; } = () => RpcFrameDelayers.Delay(1); // Just for testing
-    public bool UseMessagePackSerializer { get; init; } = false;
-    public bool UseFastRpcByteSerializer { get; init; } = false;
+    public string SerializationFormat { get; set; } = RpcSerializationFormatResolver.Default.DefaultClientFormatKey;
     public bool ExposeBackend { get; init; } = false;
     public bool UseTestClock { get; init; }
     public bool UseLogging { get; init; } = true;
@@ -37,8 +34,10 @@ public abstract class RpcTestBase(ITestOutputHelper @out) : TestBase(@out), IAsy
     public IServiceProvider Services => _services ??= CreateServices();
     public IServiceProvider ClientServices => _clientServices ??= CreateServices(true);
     public IServiceProvider WebServices => WebHost.Services;
-    public RpcWebHost WebHost => _webHost ??= Services.GetRequiredService<RpcWebHost>();
-    public ILogger? Log => (_log ??= Services.LogFor(GetType())).IfEnabled(LogLevel.Debug, IsLogEnabled);
+
+    [field: AllowNull, MaybeNull]
+    public RpcWebHost WebHost => field ??= Services.GetRequiredService<RpcWebHost>();
+    public ILogger? Log => (field ??= Services.LogFor(GetType())).IfEnabled(LogLevel.Debug, IsLogEnabled);
 
     public override async Task InitializeAsync()
     {
@@ -93,6 +92,9 @@ public abstract class RpcTestBase(ITestOutputHelper @out) : TestBase(@out), IAsy
                 var debugCategories = new List<string> {
                     "ActualLab.Rpc",
                     "ActualLab.Fusion",
+                    // "ActualLab.Fusion.EntityFramework",
+                    // "ActualLab.Fusion.EntityFramework.LogProcessing",
+                    // "ActualLab.Fusion.EntityFramework.Operations",
                     "ActualLab.CommandR",
                     "ActualLab.Tests",
                     "ActualLab.Tests.Fusion",
@@ -128,19 +130,12 @@ public abstract class RpcTestBase(ITestOutputHelper @out) : TestBase(@out), IAsy
         services.AddSingleton<RpcCallRouter>(_ => {
             return (method, arguments) => RpcPeerRef.GetDefaultPeerRef(ConnectionKind, method.IsBackend);
         });
+        services.AddSingleton<RpcSerializationFormatResolver>(
+            _ => new RpcSerializationFormatResolver(SerializationFormat, RpcSerializationFormat.All.ToArray()));
         services.AddSingleton<RpcWebSocketChannelOptionsProvider>(_ => {
-            return (_, _) => {
-                var options = WebSocketChannel<RpcMessage>.Options.Default;
-                var baseSerializer = UseMessagePackSerializer
-                    ? (IByteSerializer)MessagePackByteSerializer.Default
-                    : MemoryPackByteSerializer.Default;
-                var serializer = UseFastRpcByteSerializer
-                    ? new FastRpcMessageByteSerializer(baseSerializer, allowProjection: true)
-                    : ByteSerializer.Default.ToTyped<RpcMessage>();
-                return options with {
-                    FrameDelayerFactory = RpcFrameDelayerFactory,
-                    Serializer = serializer,
-                };
+            return (peer, _) => WebSocketChannel<RpcMessage>.Options.Default with {
+                Serializer = peer.Hub.SerializationFormats.Get(peer.Ref).MessageSerializerFactory.Invoke(peer),
+                FrameDelayerFactory = RpcFrameDelayerFactory,
             };
         });
         if (!isClient) {

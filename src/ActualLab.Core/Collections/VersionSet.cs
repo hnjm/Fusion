@@ -1,88 +1,76 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.Comparison;
 using ActualLab.Internal;
+using MessagePack;
 
 namespace ActualLab.Collections;
 
 #pragma warning disable CA1721
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
 public sealed partial record VersionSet(
-    [property: JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
-    IReadOnlyDictionary<Symbol, Version> Items
+    [property: JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
+    IReadOnlyDictionary<string, Version> Items
 ) {
     public static readonly Version ZeroVersion = new();
     public static readonly ListFormat ListFormat = ListFormat.CommaSeparated;
 
-    private int _hashCode;
+    [DataMember(Order = 0), MemoryPackOrder(0), Key(0)]
+    [field: AllowNull, MaybeNull]
+    public string Value => field ??= Format();
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public int Count => Items.Count;
-    [DataMember(Order = 0), MemoryPackOrder(0)]
-    public string Versions => Format();
-
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public int HashCode {
         get {
-            if (_hashCode == 0) {
+            if (field == 0) {
                 var hashCode = 0;
                 foreach (var (scope, version) in Items)
-                    hashCode ^= System.HashCode.Combine(scope.HashCode, version.GetHashCode());
+                    hashCode ^= System.HashCode.Combine(scope.GetOrdinalHashCode(), version.GetHashCode());
                 if (hashCode == 0)
                     hashCode = 1;
-                _hashCode = hashCode;
+                field = hashCode;
             }
-            return _hashCode;
+            return field;
         }
     }
 
-    public Version this[Symbol scope]
+    public Version this[string scope]
         => Items.GetValueOrDefault(scope, ZeroVersion)!;
 
     // Constructors
 
     public VersionSet()
-        : this(ImmutableDictionary<Symbol, Version>.Empty)
+        : this(ImmutableDictionary<string, Version>.Empty)
     { }
 
-    public VersionSet(Symbol scope, Version version)
-        : this(new Dictionary<Symbol, Version>() { { scope, version } })
+    public VersionSet(string scope, Version version)
+        : this(new Dictionary<string, Version>(StringComparer.Ordinal) { { scope, version } })
     { }
 
-    public VersionSet(Symbol scope, string version)
-        : this(new Dictionary<Symbol, Version>() { { scope, VersionExt.Parse(version) } })
+    public VersionSet(string scope, string version)
+        : this(new Dictionary<string, Version>(StringComparer.Ordinal) { { scope, VersionExt.Parse(version) } })
     { }
 
-    public VersionSet(params (Symbol Scope, Version Version)[] versions)
-        : this(versions.ToDictionary(kv => kv.Scope, kv => kv.Version))
+    public VersionSet(params (string Scope, Version Version)[] versions)
+        : this(versions.ToDictionary(kv => kv.Scope, kv => kv.Version, StringComparer.Ordinal))
     { }
 
-    public VersionSet(params (Symbol Scope, string Version)[] versions)
-        : this(versions.ToDictionary(kv => kv.Scope, kv => VersionExt.Parse(kv.Version)))
+    public VersionSet(params (string Scope, string Version)[] versions)
+        : this(versions.ToDictionary(kv => kv.Scope, kv => VersionExt.Parse(kv.Version), StringComparer.Ordinal))
     { }
 
-    [Newtonsoft.Json.JsonConstructor, JsonConstructor, MemoryPackConstructor]
-    public VersionSet(string? versions)
-        : this(Parse(versions).Items)
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
+    public VersionSet(string? value)
+        : this(Parse(value).Items)
     { }
 
     // Conversion
 
     public override string ToString()
-        => $"{nameof(VersionSet)}(\"{Versions}\")";
-
-    public string Format()
-    {
-        if (Items.Count == 0)
-            return "";
-
-        using var formatter = ListFormat.CreateFormatter();
-        foreach (var (scope, version) in Items)
-            formatter.Append($"{scope.Value}={version.Format()}");
-        formatter.AppendEnd();
-        return formatter.Output;
-    }
+        => Value;
 
     // Equality
 
@@ -97,7 +85,8 @@ public sealed partial record VersionSet(
         return true;
     }
 
-    public override int GetHashCode() => HashCode;
+    public override int GetHashCode()
+        => HashCode;
 
     // Parse and TryParse
 
@@ -114,7 +103,7 @@ public sealed partial record VersionSet(
         }
 
         result = null;
-        var versions = new Dictionary<Symbol, Version>();
+        var versions = new Dictionary<string, Version>(StringComparer.Ordinal);
         using var parser = ListFormat.CreateParser(s);
         while (parser.TryParseNext()) {
             var item = parser.Item;
@@ -134,11 +123,25 @@ public sealed partial record VersionSet(
                 return false;
             }
 
-            var scope = (Symbol)item[..equalsIndex];
+            var scope = item[..equalsIndex];
             versions[scope] = version;
         }
 
         result = new VersionSet(versions);
         return true;
+    }
+
+    // Private methods
+
+    private string Format()
+    {
+        if (Items.Count == 0)
+            return "";
+
+        using var formatter = ListFormat.CreateFormatter();
+        foreach (var (scope, version) in Items)
+            formatter.Append($"{scope}={version.Format()}");
+        formatter.AppendEnd();
+        return formatter.Output;
     }
 }

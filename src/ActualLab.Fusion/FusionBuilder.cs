@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ActualLab.Conversion;
+using ActualLab.DependencyInjection.Internal;
 using ActualLab.Fusion.Client.Caching;
 using ActualLab.Fusion.Interception;
 using ActualLab.Fusion.Internal;
@@ -8,11 +9,12 @@ using ActualLab.Fusion.Operations.Internal;
 using ActualLab.Fusion.Operations.Reprocessing;
 using ActualLab.Fusion.Client.Interception;
 using ActualLab.Fusion.Client.Internal;
+using ActualLab.Fusion.Trimming;
 using ActualLab.Fusion.UI;
 using ActualLab.Resilience;
 using ActualLab.Rpc;
+using ActualLab.Trimming;
 using Errors = ActualLab.Internal.Errors;
-using UnreferencedCode = ActualLab.Fusion.Internal.UnreferencedCode;
 
 namespace ActualLab.Fusion;
 
@@ -23,18 +25,22 @@ public readonly struct FusionBuilder
     public RpcBuilder Rpc { get; }
     public RpcServiceMode DefaultServiceMode { get; }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CommanderBuilder))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcBuilder))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ComputeServiceInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ComputeMethodFunction<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcComputeSystemCalls))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcInboundComputeCall<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcOutboundComputeCall<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RemoteComputeServiceInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RemoteComputeMethodFunction<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(FuncComputedState<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ComputedSource<>))]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "CodeKeepers are used only to retain the code")]
+    [UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "CodeKeepers are used only to retain the code")]
+    static FusionBuilder() => CodeKeeper.AddFakeAction(
+        static () => {
+            CodeKeeper.Keep<CommanderBuilder>();
+            CodeKeeper.Keep<RpcBuilder>();
+
+            // Interceptors
+            CodeKeeper.Keep<FusionProxyCodeKeeper>();
+            CodeKeeper.Keep<ComputeServiceInterceptor>();
+            CodeKeeper.Keep<RemoteComputeServiceInterceptor>();
+
+            // Other services
+            CodeKeeper.Keep<RpcComputeSystemCalls>();
+        });
+
     internal FusionBuilder(
         IServiceCollection services,
         Action<FusionBuilder>? configure,
@@ -74,9 +80,7 @@ public readonly struct FusionBuilder
             c.FusionHub()));
 
         // StateFactory
-        services.AddSingleton(c => new MixedModeService<StateFactory>.Singleton(new StateFactory(c), c));
-        services.AddScoped(c => new MixedModeService<StateFactory>.Scoped(new StateFactory(c), c));
-        services.AddTransient(c => c.GetRequiredMixedModeService<StateFactory>());
+        services.AddScopedOrSingleton(c => new StateFactory(c));
 
         // Update delayer & UI action tracker
         services.AddSingleton(_ => new UIActionTracker.Options());
@@ -160,16 +164,14 @@ public readonly struct FusionBuilder
         bool makeDefault = false)
         => new(this, serviceMode, makeDefault);
 
-    // ComputeService
+    // AddXxx - Service, Client, ComputeService, Server, DistributedService, DistributedServicePair
 
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService>(
         RpcServiceMode mode = RpcServiceMode.Default,
         bool addCommandHandlers = true)
         where TService : class, IComputeService
         => AddService(typeof(TService), typeof(TService), ServiceLifetime.Singleton, mode, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>(
@@ -178,7 +180,6 @@ public readonly struct FusionBuilder
         where TService : class
         where TImplementation : class, TService, IComputeService
         => AddService(typeof(TService), typeof(TImplementation), ServiceLifetime.Singleton, mode, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService>(
         ServiceLifetime lifetime,
@@ -186,7 +187,6 @@ public readonly struct FusionBuilder
         bool addCommandHandlers = true)
         where TService : class, IComputeService
         => AddService(typeof(TService), typeof(TService), lifetime, mode, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>(
@@ -197,27 +197,23 @@ public readonly struct FusionBuilder
         where TImplementation : class, TService, IComputeService
         => AddService(typeof(TService), typeof(TImplementation), lifetime, mode, addCommandHandlers);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         RpcServiceMode mode = RpcServiceMode.Default,
         bool addCommandHandlers = true)
         => AddService(serviceType, serviceType, ServiceLifetime.Singleton, mode, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
         RpcServiceMode mode = RpcServiceMode.Default,
         bool addCommandHandlers = true)
         => AddService(serviceType, implementationType, ServiceLifetime.Singleton, mode, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         ServiceLifetime lifetime,
         RpcServiceMode mode = RpcServiceMode.Default,
         bool addCommandHandlers = true)
         => AddService(serviceType, serviceType, lifetime, mode, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
@@ -236,23 +232,21 @@ public readonly struct FusionBuilder
         mode = mode.Or(DefaultServiceMode);
         return mode switch {
             RpcServiceMode.Local => AddComputeService(serviceType, implementationType, addCommandHandlers),
-            RpcServiceMode.Client => AddClient(serviceType, default, addCommandHandlers),
-            RpcServiceMode.Server => AddServer(serviceType, implementationType, default, addCommandHandlers),
-            RpcServiceMode.Distributed => AddDistributedService(serviceType, implementationType, default, addCommandHandlers),
-            RpcServiceMode.DistributedPair => AddDistributedServicePair(serviceType, implementationType, default, addCommandHandlers),
+            RpcServiceMode.Client => AddClient(serviceType, "", addCommandHandlers),
+            RpcServiceMode.Server => AddServer(serviceType, implementationType, "", addCommandHandlers),
+            RpcServiceMode.Distributed => AddDistributedService(serviceType, implementationType, "", addCommandHandlers),
+            RpcServiceMode.DistributedPair => AddDistributedServicePair(serviceType, implementationType, "", addCommandHandlers),
             _ => throw new ArgumentOutOfRangeException(nameof(mode)),
         };
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddClient<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService>
-        (Symbol name = default, bool addCommandHandlers = true)
+        (string name = "", bool addCommandHandlers = true)
         => AddClient(typeof(TService), name, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddClient(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
-        Symbol name = default, bool addCommandHandlers = true)
+        string name = "", bool addCommandHandlers = true)
     {
         if (!typeof(IComputeService).IsAssignableFrom(serviceType))
             throw Errors.MustImplement<IComputeService>(serviceType, nameof(serviceType));
@@ -325,12 +319,12 @@ public readonly struct FusionBuilder
     public FusionBuilder AddServer<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (Symbol name = default, bool addCommandHandlers = true)
+        (string name = "", bool addCommandHandlers = true)
         => AddServer(typeof(TService), typeof(TImplementation), name, addCommandHandlers);
     public FusionBuilder AddServer(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        Symbol name = default,
+        string name = "",
         bool addCommandHandlers = true)
     {
         // ~ RpcBuilder.AddServer, but for Compute Service
@@ -345,17 +339,15 @@ public readonly struct FusionBuilder
         return this;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddDistributedService<
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (Symbol name = default, bool addCommandHandlers = true)
+        (string name = "", bool addCommandHandlers = true)
         => AddDistributedService(typeof(TService), typeof(TImplementation), name, addCommandHandlers);
-    [RequiresUnreferencedCode(UnreferencedCode.Fusion)]
     public FusionBuilder AddDistributedService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        Symbol name = default,
+        string name = "",
         bool addCommandHandlers = true)
     {
         // ~ RpcBuilder.AddDistributedService, but for Compute Service
@@ -378,12 +370,12 @@ public readonly struct FusionBuilder
     public FusionBuilder AddDistributedServicePair<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (Symbol name = default, bool addCommandHandlers = true)
+        (string name = "", bool addCommandHandlers = true)
         => AddDistributedServicePair(typeof(TService), typeof(TImplementation), name, addCommandHandlers);
     public FusionBuilder AddDistributedServicePair(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        Symbol name = default,
+        string name = "",
         bool addCommandHandlers = true)
     {
         // ~ RpcBuilder.AddDistributedServicePair, but for Compute Service
@@ -465,31 +457,13 @@ public readonly struct FusionBuilder
         => AddRemoteComputedCache<InMemoryRemoteComputedCache, InMemoryRemoteComputedCache.Options>(
             optionsFactory ?? (_ => InMemoryRemoteComputedCache.Options.Default));
 
-    // AddComputedGraphPruner
-
-    public FusionBuilder AddComputedGraphPruner(
-        Func<IServiceProvider, ComputedGraphPruner.Options>? optionsFactory = null)
-    {
-        var services = Services;
-        services.AddSingleton(optionsFactory, _ => ComputedGraphPruner.Options.Default);
-        if (services.HasService<ComputedGraphPruner>())
-            return this;
-
-        services.AddSingleton(c => new ComputedGraphPruner(
-            c.GetRequiredService<ComputedGraphPruner.Options>(), c));
-        services.AddHostedService(c => c.GetRequiredService<ComputedGraphPruner>());
-        return this;
-    }
-
     // Nested types
 
     public class FusionTag
     {
-        private RpcServiceMode _defaultServiceMode = RpcServiceMode.Local;
-
         public RpcServiceMode DefaultServiceMode {
-            get => _defaultServiceMode;
-            set => _defaultServiceMode = value.Or(RpcServiceMode.Local);
-        }
+            get;
+            set => field = value.Or(RpcServiceMode.Local);
+        } = RpcServiceMode.Local;
     }
 }

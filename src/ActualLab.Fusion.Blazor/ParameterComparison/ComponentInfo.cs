@@ -1,29 +1,35 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using ActualLab.OS;
 using Microsoft.AspNetCore.Components;
 
 namespace ActualLab.Fusion.Blazor;
 
 public sealed class ComponentInfo
 {
-    private static readonly ConcurrentDictionary<Type, LazySlim<Type, ComponentInfo>> ComponentInfoCache = new();
+    private static readonly ConcurrentDictionary<Type, LazySlim<Type, ComponentInfo>> ComponentInfoCache
+        = new(HardwareInfo.ProcessorCountPo2, 131);
+
+    public static ILogger? DebugLog { get; set; }
 
     public Type Type { get; }
     public bool HasCustomParameterComparers { get; }
     public ParameterComparisonMode ParameterComparisonMode { get; }
     public IReadOnlyDictionary<string, ComponentParameterInfo> Parameters { get; }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "We assume Blazor components' code is fully preserved")]
     public static ComponentInfo Get(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type componentType)
-#pragma warning disable IL2067
         => ComponentInfoCache.GetOrAdd(componentType, static t => new ComponentInfo(t));
-#pragma warning restore IL2067
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume Blazor components' code is fully preserved")]
     private ComponentInfo(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type)
     {
         if (!typeof(IComponent).IsAssignableFrom(type))
             throw new ArgumentOutOfRangeException(nameof(type));
+
+        DebugLog?.LogDebug("[+] ComponentInfo({Type})", type.GetName());
 
         ComponentInfo? parentComponentInfo = null;
         if (typeof(IComponent).IsAssignableFrom(type.BaseType))
@@ -45,9 +51,7 @@ public sealed class ComponentInfo
                     continue; // Not a parameter
             }
 
-#pragma warning disable IL2026
             var comparer = parameterComparerProvider.Get(property);
-#pragma warning restore IL2026
             hasCustomParameterComparers |= comparer is not DefaultParameterComparer;
             var parameter = new ComponentParameterInfo() {
                 Property = property,

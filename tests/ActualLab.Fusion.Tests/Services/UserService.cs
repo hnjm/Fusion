@@ -2,45 +2,46 @@ using Microsoft.EntityFrameworkCore;
 using ActualLab.Fusion.EntityFramework;
 using ActualLab.Fusion.Tests.Model;
 using ActualLab.Reflection;
+using MessagePack;
 
 namespace ActualLab.Fusion.Tests.Services;
 
 public interface IUserService : IComputeService
 {
     [CommandHandler]
-    Task Create(UserService_Add command, CancellationToken cancellationToken = default);
+    public Task Create(UserService_Add command, CancellationToken cancellationToken = default);
     [CommandHandler]
-    Task Update(UserService_Update command, CancellationToken cancellationToken = default);
+    public Task Update(UserService_Update command, CancellationToken cancellationToken = default);
     [CommandHandler]
-    Task<bool> Delete(UserService_Delete command, CancellationToken cancellationToken = default);
+    public Task<bool> Delete(UserService_Delete command, CancellationToken cancellationToken = default);
 
     [ComputeMethod(MinCacheDuration = 60)]
-    Task<User?> Get(long userId, CancellationToken cancellationToken = default);
+    public Task<User?> Get(long userId, CancellationToken cancellationToken = default);
     [ComputeMethod(MinCacheDuration = 60)]
-    Task<long> Count(CancellationToken cancellationToken = default);
+    public Task<long> Count(CancellationToken cancellationToken = default);
 
     // Not a CommandHandler!
-    Task UpdateDirectly(UserService_Update command, CancellationToken cancellationToken = default);
-    Task Invalidate();
+    public Task UpdateDirectly(UserService_Update command, CancellationToken cancellationToken = default);
+    public Task Invalidate();
 }
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 // ReSharper disable once InconsistentNaming
 public partial record UserService_Add(
-    [property: DataMember, MemoryPackOrder(0)] User User,
-    [property: DataMember, MemoryPackOrder(1)] bool OrUpdate = false
+    [property: DataMember, MemoryPackOrder(0), Key(0)] User User,
+    [property: DataMember, MemoryPackOrder(1), Key(1)] bool OrUpdate = false
 ) : ICommand<Unit>;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 // ReSharper disable once InconsistentNaming
 public partial record UserService_Update(
-    [property: DataMember, MemoryPackOrder(0)] User User
+    [property: DataMember, MemoryPackOrder(0), Key(0)] User User
 ) : ICommand<Unit>;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 // ReSharper disable once InconsistentNaming
 public partial record UserService_Delete(
-    [property: DataMember, MemoryPackOrder(0)] User User
+    [property: DataMember, MemoryPackOrder(0), Key(0)] User User
 ) : ICommand<bool>;
 
 public class UserService : DbServiceBase<TestDbContext>, IUserService
@@ -65,20 +66,20 @@ public class UserService : DbServiceBase<TestDbContext>, IUserService
         var context = CommandContext.GetCurrent();
         if (Invalidation.IsActive) {
             _ = Get(user.Id, default).AssertCompleted();
-            existingUser = context.Operation.Items.Get<User>();
+            existingUser = context.Operation.Items.KeylessGet<User>();
             if (existingUser == null)
                 _ = Count(default).AssertCompleted();
             return;
         }
 
-        var dbContext = await DbHub.CreateCommandDbContext(cancellationToken).ConfigureAwait(false);
+        var dbContext = await CreateOperationDbContext(cancellationToken).ConfigureAwait(false);
         await using var _1 = dbContext.ConfigureAwait(false);
         dbContext.EnableChangeTracking(false);
 
         var userId = user.Id;
         if (orUpdate) {
             existingUser = await dbContext.Users.FindAsync(DbKey.Compose(userId), cancellationToken);
-            context.Operation.Items.Set(existingUser);
+            context.Operation.Items.KeylessSet(existingUser);
             if (existingUser != null!)
                 dbContext.Users.Update(user);
         }
@@ -96,7 +97,7 @@ public class UserService : DbServiceBase<TestDbContext>, IUserService
             return;
         }
 
-        var dbContext = await DbHub.CreateCommandDbContext(cancellationToken).ConfigureAwait(false);
+        var dbContext = await CreateOperationDbContext(cancellationToken).ConfigureAwait(false);
         await using var _1 = dbContext.ConfigureAwait(false);
 
         dbContext.Users.Update(user);
@@ -122,7 +123,7 @@ public class UserService : DbServiceBase<TestDbContext>, IUserService
         var user = command.User;
         var context = CommandContext.GetCurrent();
         if (Invalidation.IsActive) {
-            var success = context.Operation.Items.GetOrDefault<bool>();
+            var success = context.Operation.Items.KeylessGet<bool>();
             if (success) {
                 _ = Get(user.Id, default).AssertCompleted();
                 _ = Count(default).AssertCompleted();
@@ -130,13 +131,13 @@ public class UserService : DbServiceBase<TestDbContext>, IUserService
             return false;
         }
 
-        var dbContext = await DbHub.CreateCommandDbContext(cancellationToken).ConfigureAwait(false);
+        var dbContext = await CreateOperationDbContext(cancellationToken).ConfigureAwait(false);
         await using var _1 = dbContext.ConfigureAwait(false);
 
         dbContext.Users.Remove(user);
         try {
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            context.Operation.Items.Set(true);
+            context.Operation.Items.KeylessSet(true);
             return true;
         }
         catch (DbUpdateConcurrencyException) {
@@ -191,8 +192,8 @@ public class UserService : DbServiceBase<TestDbContext>, IUserService
     [ComputeMethod]
     protected virtual Task<Unit> Everything() => TaskExt.UnitTask;
 
-    private ValueTask<TestDbContext> CreateCommandDbContext(CancellationToken cancellationToken = default)
+    private ValueTask<TestDbContext> CreateOperationDbContext(CancellationToken cancellationToken = default)
         => IsProxy
-            ? DbHub.CreateCommandDbContext(cancellationToken)
+            ? DbHub.CreateOperationDbContext(cancellationToken)
             : DbHub.CreateDbContext(readWrite: true, cancellationToken);
 }

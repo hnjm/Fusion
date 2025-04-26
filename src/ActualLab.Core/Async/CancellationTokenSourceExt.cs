@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ActualLab.Async;
 
 public static class CancellationTokenSourceExt
@@ -8,6 +10,9 @@ public static class CancellationTokenSourceExt
 #else
     private static readonly Func<CancellationTokenSource, bool> IsDisposedGetter;
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See DynamicDependency below")]
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "See DynamicDependency below")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CancellationTokenSource))]
     static CancellationTokenSourceExt()
     {
         var tCts = typeof(CancellationTokenSource);

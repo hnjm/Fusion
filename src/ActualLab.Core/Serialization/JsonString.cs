@@ -1,18 +1,16 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Conversion;
 using ActualLab.Serialization.Internal;
-
-#if !NETSTANDARD2_0
-using System.Diagnostics.CodeAnalysis;
-#endif
+using MessagePack;
 
 namespace ActualLab.Serialization;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackFormatter(typeof(JsonStringMessagePackFormatter))]
 [JsonConverter(typeof(JsonStringJsonConverter))]
 [Newtonsoft.Json.JsonConverter(typeof(JsonStringNewtonsoftJsonConverter))]
 [TypeConverter(typeof(JsonStringTypeConverter))]
-[method: MemoryPackConstructor] // Has JsonConverters
+[method: MemoryPackConstructor, SerializationConstructor] // Has JsonConverters
 public partial class JsonString(string value) :
     IEquatable<JsonString>,
     IComparable<JsonString>,
@@ -21,10 +19,11 @@ public partial class JsonString(string value) :
     public static readonly JsonString? Null = null;
     public static readonly JsonString Empty= new("");
 
-    private readonly string? _value = value;
-
-    [DataMember(Order = 0), MemoryPackOrder(0)]
-    public string Value => _value ?? string.Empty;
+    [DataMember(Order = 0), MemoryPackOrder(0), Key(0)]
+    [field: AllowNull, MaybeNull]
+    public string Value {
+        get => field ?? string.Empty;
+    } = value;
 
     public static JsonString? New(string? value)
         => value == null ? Null : new JsonString(value);
@@ -74,5 +73,4 @@ public partial class JsonString(string value) :
     public static bool operator <=(JsonString left, JsonString right) => left.CompareTo(right) <= 0;
     public static bool operator >(JsonString left, JsonString right) => left.CompareTo(right) > 0;
     public static bool operator >=(JsonString left, JsonString right) => left.CompareTo(right) >= 0;
-
 }

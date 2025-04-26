@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.Interception.Internal;
+using ActualLab.OS;
 using ActualLab.Rpc.Infrastructure;
 using Errors = ActualLab.Rpc.Internal.Errors;
 
@@ -7,33 +8,35 @@ namespace ActualLab.Rpc;
 
 public sealed class RpcServiceDef
 {
-    private readonly ConcurrentDictionary<MethodInfo, RpcMethodDef?> _getOrFindMethodCache = new();
+    private readonly ConcurrentDictionary<MethodInfo, RpcMethodDef?> _getOrFindMethodCache
+        = new(HardwareInfo.ProcessorCountPo2, 131);
     private Dictionary<MethodInfo, RpcMethodDef> _methods = null!;
-    private Dictionary<Symbol, RpcMethodDef> _methodByName = null!;
-    private object? _server;
+    private Dictionary<string, RpcMethodDef> _methodByName = null!;
     private string? _toStringCached;
 
-    internal Dictionary<Symbol, RpcMethodDef> MethodByName => _methodByName;
+    internal Dictionary<string, RpcMethodDef> MethodByName => _methodByName;
 
     public RpcHub Hub { get; }
     public Type Type { get; }
     public ServiceResolver? ServerResolver { get; init; }
-    public Symbol Name { get; init; }
+    public string Name { get; init; }
     public bool IsSystem { get; init; }
     public bool IsBackend { get; init; }
     public bool HasServer => ServerResolver != null;
-    public object Server => _server ??= ServerResolver.Resolve(Hub.Services);
+    [field: AllowNull, MaybeNull]
+    public object Server => field ??= ServerResolver.Resolve(Hub.Services);
     public IReadOnlyCollection<RpcMethodDef> Methods => _methodByName.Values;
-    public Symbol Scope { get; init; }
+    public string Scope { get; init; }
     public LegacyNames LegacyNames { get; init; }
+    public PropertyBag Properties { get; init; }
 
     public RpcMethodDef this[MethodInfo method] => GetMethod(method) ?? throw Errors.NoMethod(Type, method);
-    public RpcMethodDef this[Symbol methodName] => GetMethod(methodName) ?? throw Errors.NoMethod(Type, methodName);
+    public RpcMethodDef this[string methodName] => GetMethod(methodName) ?? throw Errors.NoMethod(Type, methodName);
 
     public RpcServiceDef(RpcHub hub, RpcServiceBuilder service)
     {
         var name = service.Name;
-        if (name.IsEmpty)
+        if (name.IsNullOrEmpty())
             name = service.Type.GetName();
 
         Hub = hub;
@@ -48,21 +51,20 @@ public sealed class RpcServiceDef
             .Select(x => LegacyName.New(x)));
     }
 
-    internal void BuildMethods(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType)
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "We assume RPC-related code is fully preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "We assume RPC-related code is fully preserved")]
+    internal void BuildMethods(Type serviceType)
     {
         if (serviceType != Type)
             throw new ArgumentOutOfRangeException(nameof(serviceType));
 
         _methods = new Dictionary<MethodInfo, RpcMethodDef>();
-        _methodByName = new Dictionary<Symbol, RpcMethodDef>();
+        _methodByName = new Dictionary<string, RpcMethodDef>(StringComparer.Ordinal);
         var bindingFlags = BindingFlags.Instance | BindingFlags.Public;
-#pragma warning disable IL2067, IL2070
         var methods = (Type.IsInterface
                 ? serviceType.GetAllInterfaceMethods(bindingFlags)
                 : serviceType.GetMethods(bindingFlags)
             ).ToList();
-#pragma warning restore IL2067, IL2070
         foreach (var method in methods) {
             if (method.DeclaringType == typeof(object))
                 continue;
@@ -97,7 +99,7 @@ public sealed class RpcServiceDef
 
     public RpcMethodDef? GetMethod(MethodInfo method)
         => _methods.GetValueOrDefault(method);
-    public RpcMethodDef? GetMethod(Symbol methodName)
+    public RpcMethodDef? GetMethod(string methodName)
         => _methodByName.GetValueOrDefault(methodName);
 
     public RpcMethodDef? GetOrFindMethod(MethodInfo method)

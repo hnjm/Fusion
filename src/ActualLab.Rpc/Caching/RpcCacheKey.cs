@@ -1,41 +1,37 @@
-using Microsoft.Toolkit.HighPerformance;
+using MessagePack;
 
 namespace ActualLab.Rpc.Caching;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
-[Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
+[DataContract, MemoryPackable, MessagePackObject]
 public sealed partial class RpcCacheKey : IEquatable<RpcCacheKey>
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public readonly int HashCode;
 
-    [DataMember(Order = 0), MemoryPackOrder(0)] public readonly Symbol Service;
-    [DataMember(Order = 1), MemoryPackOrder(1)] public readonly Symbol Method;
-    [DataMember(Order = 2), MemoryPackOrder(2)] public readonly TextOrBytes ArgumentData;
+    [DataMember(Order = 0), MemoryPackOrder(0), Key(0)]
+    public readonly string Name;
+    [DataMember(Order = 1), MemoryPackOrder(1), Key(1)]
+    public readonly ReadOnlyMemory<byte> ArgumentData;
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
-    public RpcCacheKey(Symbol service, Symbol method, TextOrBytes argumentData)
+    [MemoryPackConstructor, SerializationConstructor]
+    // ReSharper disable once ConvertToPrimaryConstructor
+    public RpcCacheKey(string name, ReadOnlyMemory<byte> argumentData)
     {
-        Service = service;
-        Method = method;
+        Name = name;
         ArgumentData = argumentData;
-        HashCode = unchecked(
-            Service.Value.GetDjb2HashCode()
-            ^ (353*Method.Value.GetDjb2HashCode())
-            ^ argumentData.GetDataHashCode());
+        HashCode = name.GetXxHash3() ^ argumentData.Span.GetPartialXxHash3();
     }
 
     public override string ToString()
-        => $"#{(uint)HashCode:x}: {Service}.{Method}({Convert.ToBase64String(ArgumentData.Bytes)})";
+        => $"#{(uint)HashCode:x}: {Name}({new ByteString(ArgumentData).ToString()})";
 
     // Equality
 
     public bool Equals(RpcCacheKey? other)
         =>  !ReferenceEquals(other, null)
             && HashCode == other.HashCode
-            && string.Equals(Method.Value, other.Method.Value, StringComparison.Ordinal)
-            && string.Equals(Service.Value, other.Service.Value, StringComparison.Ordinal)
-            && ArgumentData.DataEquals(other.ArgumentData);
+            && Name.AsSpan().SequenceEqual(other.Name.AsSpan())
+            && ArgumentData.Span.SequenceEqual(other.ArgumentData.Span);
 
     public override bool Equals(object? obj) => obj is RpcCacheKey other && Equals(other);
     public override int GetHashCode() => HashCode;

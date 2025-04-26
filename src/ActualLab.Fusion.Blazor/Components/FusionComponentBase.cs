@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Components;
 
 namespace ActualLab.Fusion.Blazor;
@@ -8,14 +9,13 @@ public class FusionComponentBase : ComponentBase, IHandleEvent
 {
     public static ParameterComparisonMode DefaultParameterComparisonMode { get; set; } = ParameterComparisonMode.Custom;
 
-    private ComponentInfo? _componentInfo;
-    private Action? _stateHasChangedInvoker;
-
     protected bool MustRenderAfterEvent { get; set; } = true;
-    protected ComponentInfo ComponentInfo => _componentInfo ??= ComponentInfo.Get(GetType());
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume Blazor components' code is fully preserved")]
+    [field: AllowNull, MaybeNull]
+    protected ComponentInfo ComponentInfo => field ??= ComponentInfo.Get(GetType());
     protected int ParameterSetIndex { get; set; }
-
-    internal Action StateHasChangedInvoker => _stateHasChangedInvoker ??= StateHasChanged;
+    [field: AllowNull, MaybeNull]
+    internal Action StateHasChangedInvoker => field ??= StateHasChanged;
 
     public override Task SetParametersAsync(ParameterView parameters)
     {
@@ -46,7 +46,7 @@ public class FusionComponentBase : ComponentBase, IHandleEvent
             catch {
                 // Avoiding exception filters for AOT runtime support.
                 // Ignore cancellations, but don't bother issuing a state change.
-                if (task1.IsCanceled)
+                if (task1.IsCanceledOrFaultedWithOce())
                     return;
                 throw;
             }

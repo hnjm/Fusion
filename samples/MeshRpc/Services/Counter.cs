@@ -1,9 +1,10 @@
 using MemoryPack;
+using MessagePack;
 
 namespace Samples.MeshRpc.Services;
 
-[MemoryPackable(GenerateType.VersionTolerant)]
-[method: MemoryPackConstructor]
+[MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
+[method: MemoryPackConstructor, SerializationConstructor]
 public sealed partial record Counter(
     [property: MemoryPackOrder(0)] int Key,
     [property: MemoryPackOrder(1)] int Value,

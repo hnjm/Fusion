@@ -3,19 +3,24 @@
 // ReSharper disable ArrangeConstructorOrDestructorBody
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Numerics;
 using System.Reflection.Emit;
 using ActualLab.Internal;
+using MessagePack;
 
 namespace ActualLab.Interception;
 
 #pragma warning disable MA0012
 #pragma warning disable CA2201, CS0219
-#pragma warning disable IL2046
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract partial record ArgumentList
 {
     public const int MaxItemCount = 10;
-    public const int MaxGenericItemCount = 5;
+    public const int MaxGenericItemCount = 4;
 
 #if NET5_0_OR_GREATER
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS1))]
@@ -27,17 +32,17 @@ public abstract partial record ArgumentList
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS4))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG4<, , , >))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS5))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG5<, , , , >))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG5<, , , >))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS6))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG6<, , , , >))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG6<, , , >))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS7))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG7<, , , , >))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG7<, , , >))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS8))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG8<, , , , >))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG8<, , , >))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS9))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG9<, , , , >))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG9<, , , >))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListS10))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG10<, , , , >))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentListG10<, , , >))]
 #endif
     public static readonly ImmutableArray<Type> SimpleTypes = ImmutableArray.Create(new [] {
         typeof(ArgumentList0),
@@ -58,88 +63,106 @@ public abstract partial record ArgumentList
         typeof(ArgumentListG2<, >),
         typeof(ArgumentListG3<, , >),
         typeof(ArgumentListG4<, , , >),
-        typeof(ArgumentListG5<, , , , >),
-        typeof(ArgumentListG6<, , , , >),
-        typeof(ArgumentListG7<, , , , >),
-        typeof(ArgumentListG8<, , , , >),
-        typeof(ArgumentListG9<, , , , >),
-        typeof(ArgumentListG10<, , , , >),
+        typeof(ArgumentListG5<, , , >),
+        typeof(ArgumentListG6<, , , >),
+        typeof(ArgumentListG7<, , , >),
+        typeof(ArgumentListG8<, , , >),
+        typeof(ArgumentListG9<, , , >),
+        typeof(ArgumentListG10<, , , >),
     });
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New() => Empty;
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0>(T0 item0)
-        => AllowGenerics
+        => (UseGenerics && !DisableGenerics)
             ? new ArgumentListG1<T0>(item0)
             : new ArgumentListS1(ArgumentListType.Get(typeof(T0)), item0);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1>(T0 item0, T1 item1)
-        => AllowGenerics
+        => (UseGenerics && !DisableGenerics)
             ? new ArgumentListG2<T0, T1>(item0, item1)
             : new ArgumentListS2(ArgumentListType.Get(typeof(T0), typeof(T1)), item0, item1);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2>(T0 item0, T1 item1, T2 item2)
-        => AllowGenerics
+        => (UseGenerics && !DisableGenerics)
             ? new ArgumentListG3<T0, T1, T2>(item0, item1, item2)
             : new ArgumentListS3(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2)), item0, item1, item2);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3>(T0 item0, T1 item1, T2 item2, T3 item3)
-        => AllowGenerics
+        => (UseGenerics && !DisableGenerics)
             ? new ArgumentListG4<T0, T1, T2, T3>(item0, item1, item2, item3)
             : new ArgumentListS4(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3)), item0, item1, item2, item3);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3, T4>(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4)
-        => AllowGenerics
-            ? new ArgumentListG5<T0, T1, T2, T3, T4>(item0, item1, item2, item3, item4)
+        => (UseGenerics && !DisableGenerics)
+            ? new ArgumentListG5<T0, T1, T2, T3>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4)), item0, item1, item2, item3, item4)
             : new ArgumentListS5(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4)), item0, item1, item2, item3, item4);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3, T4, T5>(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, T5 item5)
-        => AllowGenerics
-            ? new ArgumentListG6<T0, T1, T2, T3, T4>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5)), item0, item1, item2, item3, item4, item5)
+        => (UseGenerics && !DisableGenerics)
+            ? new ArgumentListG6<T0, T1, T2, T3>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5)), item0, item1, item2, item3, item4, item5)
             : new ArgumentListS6(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5)), item0, item1, item2, item3, item4, item5);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3, T4, T5, T6>(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, T5 item5, T6 item6)
-        => AllowGenerics
-            ? new ArgumentListG7<T0, T1, T2, T3, T4>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6)), item0, item1, item2, item3, item4, item5, item6)
+        => (UseGenerics && !DisableGenerics)
+            ? new ArgumentListG7<T0, T1, T2, T3>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6)), item0, item1, item2, item3, item4, item5, item6)
             : new ArgumentListS7(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6)), item0, item1, item2, item3, item4, item5, item6);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3, T4, T5, T6, T7>(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, T5 item5, T6 item6, T7 item7)
-        => AllowGenerics
-            ? new ArgumentListG8<T0, T1, T2, T3, T4>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7)), item0, item1, item2, item3, item4, item5, item6, item7)
+        => (UseGenerics && !DisableGenerics)
+            ? new ArgumentListG8<T0, T1, T2, T3>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7)), item0, item1, item2, item3, item4, item5, item6, item7)
             : new ArgumentListS8(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7)), item0, item1, item2, item3, item4, item5, item6, item7);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3, T4, T5, T6, T7, T8>(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, T5 item5, T6 item6, T7 item7, T8 item8)
-        => AllowGenerics
-            ? new ArgumentListG9<T0, T1, T2, T3, T4>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8)), item0, item1, item2, item3, item4, item5, item6, item7, item8)
+        => (UseGenerics && !DisableGenerics)
+            ? new ArgumentListG9<T0, T1, T2, T3>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8)), item0, item1, item2, item3, item4, item5, item6, item7, item8)
             : new ArgumentListS9(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8)), item0, item1, item2, item3, item4, item5, item6, item7, item8);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ArgumentList New<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, T5 item5, T6 item6, T7 item7, T8 item8, T9 item9)
-        => AllowGenerics
-            ? new ArgumentListG10<T0, T1, T2, T3, T4>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8), typeof(T9)), item0, item1, item2, item3, item4, item5, item6, item7, item8, item9)
+        => (UseGenerics && !DisableGenerics)
+            ? new ArgumentListG10<T0, T1, T2, T3>(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8), typeof(T9)), item0, item1, item2, item3, item4, item5, item6, item7, item8, item9)
             : new ArgumentListS10(ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4), typeof(T5), typeof(T6), typeof(T7), typeof(T8), typeof(T9)), item0, item1, item2, item3, item4, item5, item6, item7, item8, item9);
 
     public virtual T Get0<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get0Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get1<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get1Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get2<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get2Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get3<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get3Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get4<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get4Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get5<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get5Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get6<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get6Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get7<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get7Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get8<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get8Untyped() => throw new IndexOutOfRangeException();
     public virtual T Get9<T>() => throw new IndexOutOfRangeException();
+    public virtual object? Get9Untyped() => throw new IndexOutOfRangeException();
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList1 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 1;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[1];
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListG1<T0> : ArgumentList1
 {
     private static ArgumentListType? _cachedType;
@@ -219,6 +242,8 @@ public sealed record ArgumentListG1<T0> : ArgumentList1
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
 
     public override T Get<T>(int index)
         => index switch {
@@ -236,7 +261,7 @@ public sealed record ArgumentListG1<T0> : ArgumentList1
     public override CancellationToken GetCancellationToken(int index)
         => index switch {
             0 => Item0 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -268,9 +293,7 @@ public sealed record ArgumentListG1<T0> : ArgumentList1
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -366,7 +389,6 @@ public sealed record ArgumentListG1<T0> : ArgumentList1
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         if (typeof(T0).IsValueType)
@@ -375,7 +397,6 @@ public sealed record ArgumentListG1<T0> : ArgumentList1
             reader.OnClass(typeof(T0), _item0, 0);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         if (typeof(T0).IsValueType)
@@ -425,6 +446,10 @@ public sealed record ArgumentListG1<T0> : ArgumentList1
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS1 : ArgumentList1
 {
     private readonly ArgumentListType _type;
@@ -507,6 +532,8 @@ public sealed record ArgumentListS1 : ArgumentList1
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
 
     public override T Get<T>(int index)
         => index switch {
@@ -524,7 +551,7 @@ public sealed record ArgumentListS1 : ArgumentList1
     public override CancellationToken GetCancellationToken(int index)
         => index switch {
             0 => Item0 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -556,9 +583,7 @@ public sealed record ArgumentListS1 : ArgumentList1
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -656,14 +681,12 @@ public sealed record ArgumentListS1 : ArgumentList1
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
         reader.OnAny(itemTypes[0], _item0, 0);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -712,15 +735,23 @@ public sealed record ArgumentListS1 : ArgumentList1
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList2 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 2;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[2];
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListG2<T0, T1> : ArgumentList2
 {
     private static ArgumentListType? _cachedType;
@@ -820,7 +851,11 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
 
     public override T Get<T>(int index)
         => index switch {
@@ -842,7 +877,7 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
         => index switch {
             0 => Item0 is CancellationToken value ? value : default!,
             1 => Item1 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -880,12 +915,10 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -990,7 +1023,6 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         if (typeof(T0).IsValueType)
@@ -1003,7 +1035,6 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
             reader.OnClass(typeof(T1), _item1, 1);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         if (typeof(T0).IsValueType)
@@ -1047,7 +1078,11 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
             return hashCode;
         }
@@ -1058,13 +1093,21 @@ public sealed record ArgumentListG2<T0, T1> : ArgumentList2
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS2 : ArgumentList2
 {
     private readonly ArgumentListType _type;
@@ -1168,7 +1211,11 @@ public sealed record ArgumentListS2 : ArgumentList2
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
 
     public override T Get<T>(int index)
         => index switch {
@@ -1190,7 +1237,7 @@ public sealed record ArgumentListS2 : ArgumentList2
         => index switch {
             0 => Item0 is CancellationToken value ? value : default!,
             1 => Item1 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -1228,12 +1275,10 @@ public sealed record ArgumentListS2 : ArgumentList2
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -1342,7 +1387,6 @@ public sealed record ArgumentListS2 : ArgumentList2
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -1350,7 +1394,6 @@ public sealed record ArgumentListS2 : ArgumentList2
         reader.OnAny(itemTypes[1], _item1, 1);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -1390,7 +1433,11 @@ public sealed record ArgumentListS2 : ArgumentList2
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
             return hashCode;
         }
@@ -1401,22 +1448,34 @@ public sealed record ArgumentListS2 : ArgumentList2
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList3 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 3;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[3];
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
 {
     private static ArgumentListType? _cachedType;
@@ -1535,8 +1594,14 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
 
     public override T Get<T>(int index)
         => index switch {
@@ -1562,7 +1627,7 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
             0 => Item0 is CancellationToken value ? value : default!,
             1 => Item1 is CancellationToken value ? value : default!,
             2 => Item2 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -1606,15 +1671,13 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -1728,7 +1791,6 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         if (typeof(T0).IsValueType)
@@ -1745,7 +1807,6 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
             reader.OnClass(typeof(T2), _item2, 2);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         if (typeof(T0).IsValueType)
@@ -1797,9 +1858,17 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
             return hashCode;
         }
@@ -1810,15 +1879,27 @@ public sealed record ArgumentListG3<T0, T1, T2> : ArgumentList3
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS3 : ArgumentList3
 {
     private readonly ArgumentListType _type;
@@ -1942,8 +2023,14 @@ public sealed record ArgumentListS3 : ArgumentList3
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
 
     public override T Get<T>(int index)
         => index switch {
@@ -1969,7 +2056,7 @@ public sealed record ArgumentListS3 : ArgumentList3
             0 => Item0 is CancellationToken value ? value : default!,
             1 => Item1 is CancellationToken value ? value : default!,
             2 => Item2 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -2013,15 +2100,13 @@ public sealed record ArgumentListS3 : ArgumentList3
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -2141,7 +2226,6 @@ public sealed record ArgumentListS3 : ArgumentList3
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -2150,7 +2234,6 @@ public sealed record ArgumentListS3 : ArgumentList3
         reader.OnAny(itemTypes[2], _item2, 2);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -2195,9 +2278,17 @@ public sealed record ArgumentListS3 : ArgumentList3
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
             return hashCode;
         }
@@ -2208,24 +2299,40 @@ public sealed record ArgumentListS3 : ArgumentList3
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList4 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 4;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[4];
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
 {
     private static ArgumentListType? _cachedType;
@@ -2363,9 +2470,17 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
 
     public override T Get<T>(int index)
         => index switch {
@@ -2395,7 +2510,7 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
             1 => Item1 is CancellationToken value ? value : default!,
             2 => Item2 is CancellationToken value ? value : default!,
             3 => Item3 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -2445,18 +2560,16 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -2579,7 +2692,6 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         if (typeof(T0).IsValueType)
@@ -2600,7 +2712,6 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
             reader.OnClass(typeof(T3), _item3, 3);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         if (typeof(T0).IsValueType)
@@ -2660,11 +2771,23 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
             return hashCode;
         }
@@ -2675,17 +2798,33 @@ public sealed record ArgumentListG4<T0, T1, T2, T3> : ArgumentList4
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS4 : ArgumentList4
 {
     private readonly ArgumentListType _type;
@@ -2829,9 +2968,17 @@ public sealed record ArgumentListS4 : ArgumentList4
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
 
     public override T Get<T>(int index)
         => index switch {
@@ -2861,7 +3008,7 @@ public sealed record ArgumentListS4 : ArgumentList4
             1 => Item1 is CancellationToken value ? value : default!,
             2 => Item2 is CancellationToken value ? value : default!,
             3 => Item3 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -2911,18 +3058,16 @@ public sealed record ArgumentListS4 : ArgumentList4
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -3053,7 +3198,6 @@ public sealed record ArgumentListS4 : ArgumentList4
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -3063,7 +3207,6 @@ public sealed record ArgumentListS4 : ArgumentList4
         reader.OnAny(itemTypes[3], _item3, 3);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -3113,11 +3256,23 @@ public sealed record ArgumentListS4 : ArgumentList4
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
             return hashCode;
         }
@@ -3128,37 +3283,55 @@ public sealed record ArgumentListS4 : ArgumentList4
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList5 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 5;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[5];
 }
 
-public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
+public sealed record ArgumentListG5<T0, T1, T2, T3> : ArgumentList5
 {
-    private static ArgumentListType? _cachedType;
-    // ReSharper disable once InconsistentNaming
-    private static ArgumentListType _type => _cachedType ??= ArgumentListType.Get(typeof(T0), typeof(T1), typeof(T2), typeof(T3), typeof(T4));
+    private readonly ArgumentListType _type;
 
     private T0 _item0;
     private T1 _item1;
     private T2 _item2;
     private T3 _item3;
-    private T4 _item4;
+    private object? _item4;
 
     public override ArgumentListType Type => _type;
 
@@ -3182,7 +3355,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
         get => _item3;
         init => _item3 = value;
     }
-    public T4 Item4 {
+    public object? Item4 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _item4;
         init => _item4 = value;
@@ -3190,17 +3363,20 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
 
     // Constructors
 
-    public ArgumentListG5()
+    public ArgumentListG5(ArgumentListType type)
     {
+        _type = type;
+        var defaultValues = type.DefaultValues;
         _item0 = default!;
         _item1 = default!;
         _item2 = default!;
         _item3 = default!;
-        _item4 = default!;
+        _item4 = defaultValues[4];
     }
 
-    public ArgumentListG5(T0 item0, T1 item1, T2 item2, T3 item3, T4 item4)
+    public ArgumentListG5(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, object? item4)
     {
+        _type = type;
         _item0 = item0;
         _item1 = item1;
         _item2 = item2;
@@ -3211,7 +3387,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
     // Duplicate
 
     public override ArgumentList Duplicate()
-        => new ArgumentListG5<T0, T1, T2, T3, T4>(Item0, Item1, Item2, Item3, Item4);
+        => new ArgumentListG5<T0, T1, T2, T3>(_type, Item0, Item1, Item2, Item3, Item4);
 
     // ToString & ToArray
 
@@ -3251,6 +3427,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
     {
         var itemTypes = (Type?[]?)null;
         Type? itemType;
+        Type? expectedItemType;
         if (!typeof(T0).IsValueType) {
             itemType = _item0?.GetType();
             if (itemType != null && itemType != typeof(T0)) {
@@ -3279,9 +3456,10 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
                 itemTypes[3] = itemType;
             }
         }
-        if (!typeof(T4).IsValueType) {
+        expectedItemType = _type.ItemTypes[4];
+        if (!expectedItemType.IsValueType) {
             itemType = _item4?.GetType();
-            if (itemType != null && itemType != typeof(T4)) {
+            if (itemType != null && itemType != expectedItemType) {
                 itemTypes ??= CreateNonDefaultItemTypes();
                 itemTypes[4] = itemType;
             }
@@ -3297,17 +3475,27 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             1 => typeof(T1),
             2 => typeof(T2),
             3 => typeof(T3),
-            4 => typeof(T4),
+            4 => _type.ItemTypes[4],
             _ => null,
         };
 
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
 
     public override T Get<T>(int index)
         => index switch {
@@ -3341,7 +3529,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             2 => Item2 is CancellationToken value ? value : default!,
             3 => Item3 is CancellationToken value ? value : default!,
             4 => Item4 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -3362,7 +3550,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         default:
             throw new ArgumentOutOfRangeException(nameof(index));
@@ -3385,7 +3573,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         default:
             throw new ArgumentOutOfRangeException(nameof(index));
@@ -3397,21 +3585,19 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
+            return;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            _item4 = _type.CastItem(4, item);
+            return;
         }
     }
 
@@ -3419,7 +3605,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
 
     public override void SetFrom(ArgumentList other)
     {
-        if (other is ArgumentListG5<T0, T1, T2, T3, T4> vOther) {
+        if (other is ArgumentListG5<T0, T1, T2, T3> vOther) {
             _item0 = vOther._item0;
             _item1 = vOther._item1;
             _item2 = vOther._item2;
@@ -3431,7 +3617,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             _item1 = other.Get1<T1>();
             _item2 = other.Get2<T2>();
             _item3 = other.Get3<T3>();
-            _item4 = other.Get4<T4>();
+            _item4 = _type.CastItem(4, other.GetUntyped(4));
         }
     }
 
@@ -3487,6 +3673,8 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item3")!.GetGetMethod()!);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item4")!.GetGetMethod()!);
+                itemType = type.ItemTypes[4];
+                il.Emit(itemType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, itemType);
 
                 // Call method
                 il.Emit(method1.IsStatic ? OpCodes.Call : OpCodes.Callvirt, method1);
@@ -3532,7 +3720,7 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
                                 , Expression.PropertyOrField(vList, "Item1")
                                 , Expression.PropertyOrField(vList, "Item2")
                                 , Expression.PropertyOrField(vList, "Item3")
-                                , Expression.PropertyOrField(vList, "Item4")
+                                , Expression.Convert(Expression.PropertyOrField(vList, "Item4"), type.ItemTypes[4])
                                 ))
                     ]);
                 return (Func<object?, ArgumentList, object?>)Expression
@@ -3543,9 +3731,9 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
+        var itemTypes = _type.ItemTypes;
         if (typeof(T0).IsValueType)
             reader.OnStruct(_item0, 0);
         else
@@ -3562,15 +3750,13 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             reader.OnStruct(_item3, 3);
         else
             reader.OnClass(typeof(T3), _item3, 3);
-        if (typeof(T4).IsValueType)
-            reader.OnStruct(_item4, 4);
-        else
-            reader.OnClass(typeof(T4), _item4, 4);
+        reader.OnAny(itemTypes[4], _item4, 4);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
+        var itemTypes = _type.ItemTypes;
+        var defaultValues = _type.DefaultValues;
         if (typeof(T0).IsValueType)
             _item0 = writer.OnStruct<T0>(0);
         else
@@ -3587,20 +3773,17 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
             _item3 = writer.OnStruct<T3>(3);
         else
             _item3 = (T3)writer.OnClass(typeof(T3), 3)!;
-        if (typeof(T4).IsValueType)
-            _item4 = writer.OnStruct<T4>(4);
-        else
-            _item4 = (T4)writer.OnClass(typeof(T4), 4)!;
+        _item4 = writer.OnAny(itemTypes[4], 4, defaultValues[4]);
     }
 
     // Equality
 
-    public bool Equals(ArgumentListG5<T0, T1, T2, T3, T4>? other)
+    public bool Equals(ArgumentListG5<T0, T1, T2, T3>? other)
     {
         if (other == null)
             return false;
 
-        if (!EqualityComparer<T4>.Default.Equals(Item4, other.Item4))
+        if (!Equals(Item4, other.Item4))
             return false;
         if (!EqualityComparer<T3>.Default.Equals(Item3, other.Item3))
             return false;
@@ -3615,10 +3798,10 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
 
     public override bool Equals(ArgumentList? other, int skipIndex)
     {
-        if (other is not ArgumentListG5<T0, T1, T2, T3, T4> vOther)
+        if (other is not ArgumentListG5<T0, T1, T2, T3> vOther)
             return false;
 
-        if (skipIndex != 4 && !EqualityComparer<T4>.Default.Equals(Item4, vOther.Item4))
+        if (skipIndex != 4 && !Equals(Item4, vOther.Item4))
             return false;
         if (skipIndex != 3 && !EqualityComparer<T3>.Default.Equals(Item3, vOther.Item3))
             return false;
@@ -3636,13 +3819,29 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
             return hashCode;
         }
@@ -3653,19 +3852,39 @@ public sealed record ArgumentListG5<T0, T1, T2, T3, T4> : ArgumentList5
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS5 : ArgumentList5
 {
     private readonly ArgumentListType _type;
@@ -3829,10 +4048,20 @@ public sealed record ArgumentListS5 : ArgumentList5
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
 
     public override T Get<T>(int index)
         => index switch {
@@ -3866,7 +4095,7 @@ public sealed record ArgumentListS5 : ArgumentList5
             2 => Item2 is CancellationToken value ? value : default!,
             3 => Item3 is CancellationToken value ? value : default!,
             4 => Item4 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -3922,21 +4151,19 @@ public sealed record ArgumentListS5 : ArgumentList5
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
+            return;
         case 4:
             _item4 = _type.CastItem(4, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -4078,7 +4305,6 @@ public sealed record ArgumentListS5 : ArgumentList5
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -4089,7 +4315,6 @@ public sealed record ArgumentListS5 : ArgumentList5
         reader.OnAny(itemTypes[4], _item4, 4);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -4144,13 +4369,29 @@ public sealed record ArgumentListS5 : ArgumentList5
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
             return hashCode;
         }
@@ -4161,29 +4402,53 @@ public sealed record ArgumentListS5 : ArgumentList5
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList6 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 6;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[6];
 }
 
-public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
+public sealed record ArgumentListG6<T0, T1, T2, T3> : ArgumentList6
 {
     private readonly ArgumentListType _type;
 
@@ -4191,7 +4456,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
     private T1 _item1;
     private T2 _item2;
     private T3 _item3;
-    private T4 _item4;
+    private object? _item4;
     private object? _item5;
 
     public override ArgumentListType Type => _type;
@@ -4216,7 +4481,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
         get => _item3;
         init => _item3 = value;
     }
-    public T4 Item4 {
+    public object? Item4 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _item4;
         init => _item4 = value;
@@ -4237,11 +4502,11 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
         _item1 = default!;
         _item2 = default!;
         _item3 = default!;
-        _item4 = default!;
+        _item4 = defaultValues[4];
         _item5 = defaultValues[5];
     }
 
-    public ArgumentListG6(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, object? item5)
+    public ArgumentListG6(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, object? item4, object? item5)
     {
         _type = type;
         _item0 = item0;
@@ -4255,7 +4520,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
     // Duplicate
 
     public override ArgumentList Duplicate()
-        => new ArgumentListG6<T0, T1, T2, T3, T4>(_type, Item0, Item1, Item2, Item3, Item4, Item5);
+        => new ArgumentListG6<T0, T1, T2, T3>(_type, Item0, Item1, Item2, Item3, Item4, Item5);
 
     // ToString & ToArray
 
@@ -4327,9 +4592,10 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
                 itemTypes[3] = itemType;
             }
         }
-        if (!typeof(T4).IsValueType) {
+        expectedItemType = _type.ItemTypes[4];
+        if (!expectedItemType.IsValueType) {
             itemType = _item4?.GetType();
-            if (itemType != null && itemType != typeof(T4)) {
+            if (itemType != null && itemType != expectedItemType) {
                 itemTypes ??= CreateNonDefaultItemTypes();
                 itemTypes[4] = itemType;
             }
@@ -4353,7 +4619,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             1 => typeof(T1),
             2 => typeof(T2),
             3 => typeof(T3),
-            4 => typeof(T4),
+            4 => _type.ItemTypes[4],
             5 => _type.ItemTypes[5],
             _ => null,
         };
@@ -4361,11 +4627,23 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
 
     public override T Get<T>(int index)
         => index switch {
@@ -4403,7 +4681,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             3 => Item3 is CancellationToken value ? value : default!,
             4 => Item4 is CancellationToken value ? value : default!,
             5 => Item5 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -4424,7 +4702,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -4450,7 +4728,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -4465,24 +4743,22 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
+            return;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
-            break;
+            _item4 = _type.CastItem(4, item);
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -4490,7 +4766,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
 
     public override void SetFrom(ArgumentList other)
     {
-        if (other is ArgumentListG6<T0, T1, T2, T3, T4> vOther) {
+        if (other is ArgumentListG6<T0, T1, T2, T3> vOther) {
             _item0 = vOther._item0;
             _item1 = vOther._item1;
             _item2 = vOther._item2;
@@ -4503,7 +4779,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             _item1 = other.Get1<T1>();
             _item2 = other.Get2<T2>();
             _item3 = other.Get3<T3>();
-            _item4 = other.Get4<T4>();
+            _item4 = _type.CastItem(4, other.GetUntyped(4));
             _item5 = _type.CastItem(5, other.GetUntyped(5));
         }
     }
@@ -4562,6 +4838,8 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item3")!.GetGetMethod()!);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item4")!.GetGetMethod()!);
+                itemType = type.ItemTypes[4];
+                il.Emit(itemType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, itemType);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item5")!.GetGetMethod()!);
                 itemType = type.ItemTypes[5];
@@ -4613,7 +4891,7 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
                                 , Expression.PropertyOrField(vList, "Item1")
                                 , Expression.PropertyOrField(vList, "Item2")
                                 , Expression.PropertyOrField(vList, "Item3")
-                                , Expression.PropertyOrField(vList, "Item4")
+                                , Expression.Convert(Expression.PropertyOrField(vList, "Item4"), type.ItemTypes[4])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item5"), type.ItemTypes[5])
                                 ))
                     ]);
@@ -4625,7 +4903,6 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -4645,14 +4922,10 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             reader.OnStruct(_item3, 3);
         else
             reader.OnClass(typeof(T3), _item3, 3);
-        if (typeof(T4).IsValueType)
-            reader.OnStruct(_item4, 4);
-        else
-            reader.OnClass(typeof(T4), _item4, 4);
+        reader.OnAny(itemTypes[4], _item4, 4);
         reader.OnAny(itemTypes[5], _item5, 5);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -4673,23 +4946,20 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
             _item3 = writer.OnStruct<T3>(3);
         else
             _item3 = (T3)writer.OnClass(typeof(T3), 3)!;
-        if (typeof(T4).IsValueType)
-            _item4 = writer.OnStruct<T4>(4);
-        else
-            _item4 = (T4)writer.OnClass(typeof(T4), 4)!;
+        _item4 = writer.OnAny(itemTypes[4], 4, defaultValues[4]);
         _item5 = writer.OnAny(itemTypes[5], 5, defaultValues[5]);
     }
 
     // Equality
 
-    public bool Equals(ArgumentListG6<T0, T1, T2, T3, T4>? other)
+    public bool Equals(ArgumentListG6<T0, T1, T2, T3>? other)
     {
         if (other == null)
             return false;
 
         if (!Equals(Item5, other.Item5))
             return false;
-        if (!EqualityComparer<T4>.Default.Equals(Item4, other.Item4))
+        if (!Equals(Item4, other.Item4))
             return false;
         if (!EqualityComparer<T3>.Default.Equals(Item3, other.Item3))
             return false;
@@ -4704,12 +4974,12 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
 
     public override bool Equals(ArgumentList? other, int skipIndex)
     {
-        if (other is not ArgumentListG6<T0, T1, T2, T3, T4> vOther)
+        if (other is not ArgumentListG6<T0, T1, T2, T3> vOther)
             return false;
 
         if (skipIndex != 5 && !Equals(Item5, vOther.Item5))
             return false;
-        if (skipIndex != 4 && !EqualityComparer<T4>.Default.Equals(Item4, vOther.Item4))
+        if (skipIndex != 4 && !Equals(Item4, vOther.Item4))
             return false;
         if (skipIndex != 3 && !EqualityComparer<T3>.Default.Equals(Item3, vOther.Item3))
             return false;
@@ -4727,15 +4997,35 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
             return hashCode;
         }
@@ -4746,21 +5036,45 @@ public sealed record ArgumentListG6<T0, T1, T2, T3, T4> : ArgumentList6
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS6 : ArgumentList6
 {
     private readonly ArgumentListType _type;
@@ -4944,11 +5258,23 @@ public sealed record ArgumentListS6 : ArgumentList6
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
 
     public override T Get<T>(int index)
         => index switch {
@@ -4986,7 +5312,7 @@ public sealed record ArgumentListS6 : ArgumentList6
             3 => Item3 is CancellationToken value ? value : default!,
             4 => Item4 is CancellationToken value ? value : default!,
             5 => Item5 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -5048,24 +5374,22 @@ public sealed record ArgumentListS6 : ArgumentList6
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
+            return;
         case 4:
             _item4 = _type.CastItem(4, item);
-            break;
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -5218,7 +5542,6 @@ public sealed record ArgumentListS6 : ArgumentList6
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -5230,7 +5553,6 @@ public sealed record ArgumentListS6 : ArgumentList6
         reader.OnAny(itemTypes[5], _item5, 5);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -5290,15 +5612,35 @@ public sealed record ArgumentListS6 : ArgumentList6
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
             return hashCode;
         }
@@ -5309,31 +5651,59 @@ public sealed record ArgumentListS6 : ArgumentList6
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList7 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 7;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[7];
 }
 
-public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
+public sealed record ArgumentListG7<T0, T1, T2, T3> : ArgumentList7
 {
     private readonly ArgumentListType _type;
 
@@ -5341,7 +5711,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
     private T1 _item1;
     private T2 _item2;
     private T3 _item3;
-    private T4 _item4;
+    private object? _item4;
     private object? _item5;
     private object? _item6;
 
@@ -5367,7 +5737,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
         get => _item3;
         init => _item3 = value;
     }
-    public T4 Item4 {
+    public object? Item4 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _item4;
         init => _item4 = value;
@@ -5393,12 +5763,12 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
         _item1 = default!;
         _item2 = default!;
         _item3 = default!;
-        _item4 = default!;
+        _item4 = defaultValues[4];
         _item5 = defaultValues[5];
         _item6 = defaultValues[6];
     }
 
-    public ArgumentListG7(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, object? item5, object? item6)
+    public ArgumentListG7(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, object? item4, object? item5, object? item6)
     {
         _type = type;
         _item0 = item0;
@@ -5413,7 +5783,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
     // Duplicate
 
     public override ArgumentList Duplicate()
-        => new ArgumentListG7<T0, T1, T2, T3, T4>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6);
+        => new ArgumentListG7<T0, T1, T2, T3>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6);
 
     // ToString & ToArray
 
@@ -5488,9 +5858,10 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
                 itemTypes[3] = itemType;
             }
         }
-        if (!typeof(T4).IsValueType) {
+        expectedItemType = _type.ItemTypes[4];
+        if (!expectedItemType.IsValueType) {
             itemType = _item4?.GetType();
-            if (itemType != null && itemType != typeof(T4)) {
+            if (itemType != null && itemType != expectedItemType) {
                 itemTypes ??= CreateNonDefaultItemTypes();
                 itemTypes[4] = itemType;
             }
@@ -5522,7 +5893,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             1 => typeof(T1),
             2 => typeof(T2),
             3 => typeof(T3),
-            4 => typeof(T4),
+            4 => _type.ItemTypes[4],
             5 => _type.ItemTypes[5],
             6 => _type.ItemTypes[6],
             _ => null,
@@ -5531,12 +5902,26 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
 
     public override T Get<T>(int index)
         => index switch {
@@ -5578,7 +5963,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             4 => Item4 is CancellationToken value ? value : default!,
             5 => Item5 is CancellationToken value ? value : default!,
             6 => Item6 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -5599,7 +5984,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -5628,7 +6013,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -5646,27 +6031,25 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
+            return;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
-            break;
+            _item4 = _type.CastItem(4, item);
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -5674,7 +6057,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
 
     public override void SetFrom(ArgumentList other)
     {
-        if (other is ArgumentListG7<T0, T1, T2, T3, T4> vOther) {
+        if (other is ArgumentListG7<T0, T1, T2, T3> vOther) {
             _item0 = vOther._item0;
             _item1 = vOther._item1;
             _item2 = vOther._item2;
@@ -5688,7 +6071,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             _item1 = other.Get1<T1>();
             _item2 = other.Get2<T2>();
             _item3 = other.Get3<T3>();
-            _item4 = other.Get4<T4>();
+            _item4 = _type.CastItem(4, other.GetUntyped(4));
             _item5 = _type.CastItem(5, other.GetUntyped(5));
             _item6 = _type.CastItem(6, other.GetUntyped(6));
         }
@@ -5750,6 +6133,8 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item3")!.GetGetMethod()!);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item4")!.GetGetMethod()!);
+                itemType = type.ItemTypes[4];
+                il.Emit(itemType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, itemType);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item5")!.GetGetMethod()!);
                 itemType = type.ItemTypes[5];
@@ -5807,7 +6192,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
                                 , Expression.PropertyOrField(vList, "Item1")
                                 , Expression.PropertyOrField(vList, "Item2")
                                 , Expression.PropertyOrField(vList, "Item3")
-                                , Expression.PropertyOrField(vList, "Item4")
+                                , Expression.Convert(Expression.PropertyOrField(vList, "Item4"), type.ItemTypes[4])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item5"), type.ItemTypes[5])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item6"), type.ItemTypes[6])
                                 ))
@@ -5820,7 +6205,6 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -5840,15 +6224,11 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             reader.OnStruct(_item3, 3);
         else
             reader.OnClass(typeof(T3), _item3, 3);
-        if (typeof(T4).IsValueType)
-            reader.OnStruct(_item4, 4);
-        else
-            reader.OnClass(typeof(T4), _item4, 4);
+        reader.OnAny(itemTypes[4], _item4, 4);
         reader.OnAny(itemTypes[5], _item5, 5);
         reader.OnAny(itemTypes[6], _item6, 6);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -5869,17 +6249,14 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             _item3 = writer.OnStruct<T3>(3);
         else
             _item3 = (T3)writer.OnClass(typeof(T3), 3)!;
-        if (typeof(T4).IsValueType)
-            _item4 = writer.OnStruct<T4>(4);
-        else
-            _item4 = (T4)writer.OnClass(typeof(T4), 4)!;
+        _item4 = writer.OnAny(itemTypes[4], 4, defaultValues[4]);
         _item5 = writer.OnAny(itemTypes[5], 5, defaultValues[5]);
         _item6 = writer.OnAny(itemTypes[6], 6, defaultValues[6]);
     }
 
     // Equality
 
-    public bool Equals(ArgumentListG7<T0, T1, T2, T3, T4>? other)
+    public bool Equals(ArgumentListG7<T0, T1, T2, T3>? other)
     {
         if (other == null)
             return false;
@@ -5888,7 +6265,7 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
             return false;
         if (!Equals(Item5, other.Item5))
             return false;
-        if (!EqualityComparer<T4>.Default.Equals(Item4, other.Item4))
+        if (!Equals(Item4, other.Item4))
             return false;
         if (!EqualityComparer<T3>.Default.Equals(Item3, other.Item3))
             return false;
@@ -5903,14 +6280,14 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
 
     public override bool Equals(ArgumentList? other, int skipIndex)
     {
-        if (other is not ArgumentListG7<T0, T1, T2, T3, T4> vOther)
+        if (other is not ArgumentListG7<T0, T1, T2, T3> vOther)
             return false;
 
         if (skipIndex != 6 && !Equals(Item6, vOther.Item6))
             return false;
         if (skipIndex != 5 && !Equals(Item5, vOther.Item5))
             return false;
-        if (skipIndex != 4 && !EqualityComparer<T4>.Default.Equals(Item4, vOther.Item4))
+        if (skipIndex != 4 && !Equals(Item4, vOther.Item4))
             return false;
         if (skipIndex != 3 && !EqualityComparer<T3>.Default.Equals(Item3, vOther.Item3))
             return false;
@@ -5928,17 +6305,41 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
             return hashCode;
         }
@@ -5949,23 +6350,51 @@ public sealed record ArgumentListG7<T0, T1, T2, T3, T4> : ArgumentList7
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS7 : ArgumentList7
 {
     private readonly ArgumentListType _type;
@@ -6169,12 +6598,26 @@ public sealed record ArgumentListS7 : ArgumentList7
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
 
     public override T Get<T>(int index)
         => index switch {
@@ -6216,7 +6659,7 @@ public sealed record ArgumentListS7 : ArgumentList7
             4 => Item4 is CancellationToken value ? value : default!,
             5 => Item5 is CancellationToken value ? value : default!,
             6 => Item6 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -6284,27 +6727,25 @@ public sealed record ArgumentListS7 : ArgumentList7
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
+            return;
         case 4:
             _item4 = _type.CastItem(4, item);
-            break;
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -6468,7 +6909,6 @@ public sealed record ArgumentListS7 : ArgumentList7
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -6481,7 +6921,6 @@ public sealed record ArgumentListS7 : ArgumentList7
         reader.OnAny(itemTypes[6], _item6, 6);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -6546,17 +6985,41 @@ public sealed record ArgumentListS7 : ArgumentList7
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
             return hashCode;
         }
@@ -6567,33 +7030,65 @@ public sealed record ArgumentListS7 : ArgumentList7
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList8 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 8;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[8];
 }
 
-public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
+public sealed record ArgumentListG8<T0, T1, T2, T3> : ArgumentList8
 {
     private readonly ArgumentListType _type;
 
@@ -6601,7 +7096,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
     private T1 _item1;
     private T2 _item2;
     private T3 _item3;
-    private T4 _item4;
+    private object? _item4;
     private object? _item5;
     private object? _item6;
     private object? _item7;
@@ -6628,7 +7123,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
         get => _item3;
         init => _item3 = value;
     }
-    public T4 Item4 {
+    public object? Item4 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _item4;
         init => _item4 = value;
@@ -6659,13 +7154,13 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
         _item1 = default!;
         _item2 = default!;
         _item3 = default!;
-        _item4 = default!;
+        _item4 = defaultValues[4];
         _item5 = defaultValues[5];
         _item6 = defaultValues[6];
         _item7 = defaultValues[7];
     }
 
-    public ArgumentListG8(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, object? item5, object? item6, object? item7)
+    public ArgumentListG8(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, object? item4, object? item5, object? item6, object? item7)
     {
         _type = type;
         _item0 = item0;
@@ -6681,7 +7176,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
     // Duplicate
 
     public override ArgumentList Duplicate()
-        => new ArgumentListG8<T0, T1, T2, T3, T4>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6, Item7);
+        => new ArgumentListG8<T0, T1, T2, T3>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6, Item7);
 
     // ToString & ToArray
 
@@ -6759,9 +7254,10 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
                 itemTypes[3] = itemType;
             }
         }
-        if (!typeof(T4).IsValueType) {
+        expectedItemType = _type.ItemTypes[4];
+        if (!expectedItemType.IsValueType) {
             itemType = _item4?.GetType();
-            if (itemType != null && itemType != typeof(T4)) {
+            if (itemType != null && itemType != expectedItemType) {
                 itemTypes ??= CreateNonDefaultItemTypes();
                 itemTypes[4] = itemType;
             }
@@ -6801,7 +7297,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             1 => typeof(T1),
             2 => typeof(T2),
             3 => typeof(T3),
-            4 => typeof(T4),
+            4 => _type.ItemTypes[4],
             5 => _type.ItemTypes[5],
             6 => _type.ItemTypes[6],
             7 => _type.ItemTypes[7],
@@ -6811,13 +7307,29 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
     public override T Get7<T>() => Item7 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get7Untyped() => Item7;
 
     public override T Get<T>(int index)
         => index switch {
@@ -6863,7 +7375,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             5 => Item5 is CancellationToken value ? value : default!,
             6 => Item6 is CancellationToken value ? value : default!,
             7 => Item7 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -6884,7 +7396,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -6916,7 +7428,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -6937,30 +7449,28 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
+            return;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
-            break;
+            _item4 = _type.CastItem(4, item);
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
+            return;
         case 7:
             _item7 = _type.CastItem(7, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -6968,7 +7478,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
 
     public override void SetFrom(ArgumentList other)
     {
-        if (other is ArgumentListG8<T0, T1, T2, T3, T4> vOther) {
+        if (other is ArgumentListG8<T0, T1, T2, T3> vOther) {
             _item0 = vOther._item0;
             _item1 = vOther._item1;
             _item2 = vOther._item2;
@@ -6983,7 +7493,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             _item1 = other.Get1<T1>();
             _item2 = other.Get2<T2>();
             _item3 = other.Get3<T3>();
-            _item4 = other.Get4<T4>();
+            _item4 = _type.CastItem(4, other.GetUntyped(4));
             _item5 = _type.CastItem(5, other.GetUntyped(5));
             _item6 = _type.CastItem(6, other.GetUntyped(6));
             _item7 = _type.CastItem(7, other.GetUntyped(7));
@@ -7048,6 +7558,8 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item3")!.GetGetMethod()!);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item4")!.GetGetMethod()!);
+                itemType = type.ItemTypes[4];
+                il.Emit(itemType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, itemType);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item5")!.GetGetMethod()!);
                 itemType = type.ItemTypes[5];
@@ -7111,7 +7623,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
                                 , Expression.PropertyOrField(vList, "Item1")
                                 , Expression.PropertyOrField(vList, "Item2")
                                 , Expression.PropertyOrField(vList, "Item3")
-                                , Expression.PropertyOrField(vList, "Item4")
+                                , Expression.Convert(Expression.PropertyOrField(vList, "Item4"), type.ItemTypes[4])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item5"), type.ItemTypes[5])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item6"), type.ItemTypes[6])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item7"), type.ItemTypes[7])
@@ -7125,7 +7637,6 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -7145,16 +7656,12 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             reader.OnStruct(_item3, 3);
         else
             reader.OnClass(typeof(T3), _item3, 3);
-        if (typeof(T4).IsValueType)
-            reader.OnStruct(_item4, 4);
-        else
-            reader.OnClass(typeof(T4), _item4, 4);
+        reader.OnAny(itemTypes[4], _item4, 4);
         reader.OnAny(itemTypes[5], _item5, 5);
         reader.OnAny(itemTypes[6], _item6, 6);
         reader.OnAny(itemTypes[7], _item7, 7);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -7175,10 +7682,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             _item3 = writer.OnStruct<T3>(3);
         else
             _item3 = (T3)writer.OnClass(typeof(T3), 3)!;
-        if (typeof(T4).IsValueType)
-            _item4 = writer.OnStruct<T4>(4);
-        else
-            _item4 = (T4)writer.OnClass(typeof(T4), 4)!;
+        _item4 = writer.OnAny(itemTypes[4], 4, defaultValues[4]);
         _item5 = writer.OnAny(itemTypes[5], 5, defaultValues[5]);
         _item6 = writer.OnAny(itemTypes[6], 6, defaultValues[6]);
         _item7 = writer.OnAny(itemTypes[7], 7, defaultValues[7]);
@@ -7186,7 +7690,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
 
     // Equality
 
-    public bool Equals(ArgumentListG8<T0, T1, T2, T3, T4>? other)
+    public bool Equals(ArgumentListG8<T0, T1, T2, T3>? other)
     {
         if (other == null)
             return false;
@@ -7197,7 +7701,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             return false;
         if (!Equals(Item5, other.Item5))
             return false;
-        if (!EqualityComparer<T4>.Default.Equals(Item4, other.Item4))
+        if (!Equals(Item4, other.Item4))
             return false;
         if (!EqualityComparer<T3>.Default.Equals(Item3, other.Item3))
             return false;
@@ -7212,7 +7716,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
 
     public override bool Equals(ArgumentList? other, int skipIndex)
     {
-        if (other is not ArgumentListG8<T0, T1, T2, T3, T4> vOther)
+        if (other is not ArgumentListG8<T0, T1, T2, T3> vOther)
             return false;
 
         if (skipIndex != 7 && !Equals(Item7, vOther.Item7))
@@ -7221,7 +7725,7 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
             return false;
         if (skipIndex != 5 && !Equals(Item5, vOther.Item5))
             return false;
-        if (skipIndex != 4 && !EqualityComparer<T4>.Default.Equals(Item4, vOther.Item4))
+        if (skipIndex != 4 && !Equals(Item4, vOther.Item4))
             return false;
         if (skipIndex != 3 && !EqualityComparer<T3>.Default.Equals(Item3, vOther.Item3))
             return false;
@@ -7239,19 +7743,47 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item7 is { } item7 ? item7.GetHashCode() : 0);
             return hashCode;
         }
@@ -7262,25 +7794,57 @@ public sealed record ArgumentListG8<T0, T1, T2, T3, T4> : ArgumentList8
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 7 ? 0 : (Item7 is { } item7 ? item7.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS8 : ArgumentList8
 {
     private readonly ArgumentListType _type;
@@ -7504,13 +8068,29 @@ public sealed record ArgumentListS8 : ArgumentList8
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
     public override T Get7<T>() => Item7 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get7Untyped() => Item7;
 
     public override T Get<T>(int index)
         => index switch {
@@ -7556,7 +8136,7 @@ public sealed record ArgumentListS8 : ArgumentList8
             5 => Item5 is CancellationToken value ? value : default!,
             6 => Item6 is CancellationToken value ? value : default!,
             7 => Item7 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -7630,30 +8210,28 @@ public sealed record ArgumentListS8 : ArgumentList8
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
+            return;
         case 4:
             _item4 = _type.CastItem(4, item);
-            break;
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
+            return;
         case 7:
             _item7 = _type.CastItem(7, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -7828,7 +8406,6 @@ public sealed record ArgumentListS8 : ArgumentList8
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -7842,7 +8419,6 @@ public sealed record ArgumentListS8 : ArgumentList8
         reader.OnAny(itemTypes[7], _item7, 7);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -7912,19 +8488,47 @@ public sealed record ArgumentListS8 : ArgumentList8
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item7 is { } item7 ? item7.GetHashCode() : 0);
             return hashCode;
         }
@@ -7935,35 +8539,71 @@ public sealed record ArgumentListS8 : ArgumentList8
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 7 ? 0 : (Item7 is { } item7 ? item7.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList9 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 9;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[9];
 }
 
-public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
+public sealed record ArgumentListG9<T0, T1, T2, T3> : ArgumentList9
 {
     private readonly ArgumentListType _type;
 
@@ -7971,7 +8611,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
     private T1 _item1;
     private T2 _item2;
     private T3 _item3;
-    private T4 _item4;
+    private object? _item4;
     private object? _item5;
     private object? _item6;
     private object? _item7;
@@ -7999,7 +8639,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
         get => _item3;
         init => _item3 = value;
     }
-    public T4 Item4 {
+    public object? Item4 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _item4;
         init => _item4 = value;
@@ -8035,14 +8675,14 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
         _item1 = default!;
         _item2 = default!;
         _item3 = default!;
-        _item4 = default!;
+        _item4 = defaultValues[4];
         _item5 = defaultValues[5];
         _item6 = defaultValues[6];
         _item7 = defaultValues[7];
         _item8 = defaultValues[8];
     }
 
-    public ArgumentListG9(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, object? item5, object? item6, object? item7, object? item8)
+    public ArgumentListG9(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, object? item4, object? item5, object? item6, object? item7, object? item8)
     {
         _type = type;
         _item0 = item0;
@@ -8059,7 +8699,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
     // Duplicate
 
     public override ArgumentList Duplicate()
-        => new ArgumentListG9<T0, T1, T2, T3, T4>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6, Item7, Item8);
+        => new ArgumentListG9<T0, T1, T2, T3>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6, Item7, Item8);
 
     // ToString & ToArray
 
@@ -8140,9 +8780,10 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
                 itemTypes[3] = itemType;
             }
         }
-        if (!typeof(T4).IsValueType) {
+        expectedItemType = _type.ItemTypes[4];
+        if (!expectedItemType.IsValueType) {
             itemType = _item4?.GetType();
-            if (itemType != null && itemType != typeof(T4)) {
+            if (itemType != null && itemType != expectedItemType) {
                 itemTypes ??= CreateNonDefaultItemTypes();
                 itemTypes[4] = itemType;
             }
@@ -8190,7 +8831,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             1 => typeof(T1),
             2 => typeof(T2),
             3 => typeof(T3),
-            4 => typeof(T4),
+            4 => _type.ItemTypes[4],
             5 => _type.ItemTypes[5],
             6 => _type.ItemTypes[6],
             7 => _type.ItemTypes[7],
@@ -8201,14 +8842,32 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
     public override T Get7<T>() => Item7 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get7Untyped() => Item7;
     public override T Get8<T>() => Item8 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get8Untyped() => Item8;
 
     public override T Get<T>(int index)
         => index switch {
@@ -8258,7 +8917,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             6 => Item6 is CancellationToken value ? value : default!,
             7 => Item7 is CancellationToken value ? value : default!,
             8 => Item8 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -8279,7 +8938,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -8314,7 +8973,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -8338,33 +8997,31 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
+            return;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
-            break;
+            _item4 = _type.CastItem(4, item);
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
+            return;
         case 7:
             _item7 = _type.CastItem(7, item);
-            break;
+            return;
         case 8:
             _item8 = _type.CastItem(8, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -8372,7 +9029,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
 
     public override void SetFrom(ArgumentList other)
     {
-        if (other is ArgumentListG9<T0, T1, T2, T3, T4> vOther) {
+        if (other is ArgumentListG9<T0, T1, T2, T3> vOther) {
             _item0 = vOther._item0;
             _item1 = vOther._item1;
             _item2 = vOther._item2;
@@ -8388,7 +9045,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             _item1 = other.Get1<T1>();
             _item2 = other.Get2<T2>();
             _item3 = other.Get3<T3>();
-            _item4 = other.Get4<T4>();
+            _item4 = _type.CastItem(4, other.GetUntyped(4));
             _item5 = _type.CastItem(5, other.GetUntyped(5));
             _item6 = _type.CastItem(6, other.GetUntyped(6));
             _item7 = _type.CastItem(7, other.GetUntyped(7));
@@ -8456,6 +9113,8 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item3")!.GetGetMethod()!);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item4")!.GetGetMethod()!);
+                itemType = type.ItemTypes[4];
+                il.Emit(itemType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, itemType);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item5")!.GetGetMethod()!);
                 itemType = type.ItemTypes[5];
@@ -8525,7 +9184,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
                                 , Expression.PropertyOrField(vList, "Item1")
                                 , Expression.PropertyOrField(vList, "Item2")
                                 , Expression.PropertyOrField(vList, "Item3")
-                                , Expression.PropertyOrField(vList, "Item4")
+                                , Expression.Convert(Expression.PropertyOrField(vList, "Item4"), type.ItemTypes[4])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item5"), type.ItemTypes[5])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item6"), type.ItemTypes[6])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item7"), type.ItemTypes[7])
@@ -8540,7 +9199,6 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -8560,17 +9218,13 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             reader.OnStruct(_item3, 3);
         else
             reader.OnClass(typeof(T3), _item3, 3);
-        if (typeof(T4).IsValueType)
-            reader.OnStruct(_item4, 4);
-        else
-            reader.OnClass(typeof(T4), _item4, 4);
+        reader.OnAny(itemTypes[4], _item4, 4);
         reader.OnAny(itemTypes[5], _item5, 5);
         reader.OnAny(itemTypes[6], _item6, 6);
         reader.OnAny(itemTypes[7], _item7, 7);
         reader.OnAny(itemTypes[8], _item8, 8);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -8591,10 +9245,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             _item3 = writer.OnStruct<T3>(3);
         else
             _item3 = (T3)writer.OnClass(typeof(T3), 3)!;
-        if (typeof(T4).IsValueType)
-            _item4 = writer.OnStruct<T4>(4);
-        else
-            _item4 = (T4)writer.OnClass(typeof(T4), 4)!;
+        _item4 = writer.OnAny(itemTypes[4], 4, defaultValues[4]);
         _item5 = writer.OnAny(itemTypes[5], 5, defaultValues[5]);
         _item6 = writer.OnAny(itemTypes[6], 6, defaultValues[6]);
         _item7 = writer.OnAny(itemTypes[7], 7, defaultValues[7]);
@@ -8603,7 +9254,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
 
     // Equality
 
-    public bool Equals(ArgumentListG9<T0, T1, T2, T3, T4>? other)
+    public bool Equals(ArgumentListG9<T0, T1, T2, T3>? other)
     {
         if (other == null)
             return false;
@@ -8616,7 +9267,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             return false;
         if (!Equals(Item5, other.Item5))
             return false;
-        if (!EqualityComparer<T4>.Default.Equals(Item4, other.Item4))
+        if (!Equals(Item4, other.Item4))
             return false;
         if (!EqualityComparer<T3>.Default.Equals(Item3, other.Item3))
             return false;
@@ -8631,7 +9282,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
 
     public override bool Equals(ArgumentList? other, int skipIndex)
     {
-        if (other is not ArgumentListG9<T0, T1, T2, T3, T4> vOther)
+        if (other is not ArgumentListG9<T0, T1, T2, T3> vOther)
             return false;
 
         if (skipIndex != 8 && !Equals(Item8, vOther.Item8))
@@ -8642,7 +9293,7 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
             return false;
         if (skipIndex != 5 && !Equals(Item5, vOther.Item5))
             return false;
-        if (skipIndex != 4 && !EqualityComparer<T4>.Default.Equals(Item4, vOther.Item4))
+        if (skipIndex != 4 && !Equals(Item4, vOther.Item4))
             return false;
         if (skipIndex != 3 && !EqualityComparer<T3>.Default.Equals(Item3, vOther.Item3))
             return false;
@@ -8660,21 +9311,53 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item7 is { } item7 ? item7.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item8 is { } item8 ? item8.GetHashCode() : 0);
             return hashCode;
         }
@@ -8685,27 +9368,63 @@ public sealed record ArgumentListG9<T0, T1, T2, T3, T4> : ArgumentList9
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 7 ? 0 : (Item7 is { } item7 ? item7.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 8 ? 0 : (Item8 is { } item8 ? item8.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS9 : ArgumentList9
 {
     private readonly ArgumentListType _type;
@@ -8949,14 +9668,32 @@ public sealed record ArgumentListS9 : ArgumentList9
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
     public override T Get7<T>() => Item7 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get7Untyped() => Item7;
     public override T Get8<T>() => Item8 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get8Untyped() => Item8;
 
     public override T Get<T>(int index)
         => index switch {
@@ -9006,7 +9743,7 @@ public sealed record ArgumentListS9 : ArgumentList9
             6 => Item6 is CancellationToken value ? value : default!,
             7 => Item7 is CancellationToken value ? value : default!,
             8 => Item8 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -9086,33 +9823,31 @@ public sealed record ArgumentListS9 : ArgumentList9
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
+            return;
         case 4:
             _item4 = _type.CastItem(4, item);
-            break;
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
+            return;
         case 7:
             _item7 = _type.CastItem(7, item);
-            break;
+            return;
         case 8:
             _item8 = _type.CastItem(8, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -9298,7 +10033,6 @@ public sealed record ArgumentListS9 : ArgumentList9
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -9313,7 +10047,6 @@ public sealed record ArgumentListS9 : ArgumentList9
         reader.OnAny(itemTypes[8], _item8, 8);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -9388,21 +10121,53 @@ public sealed record ArgumentListS9 : ArgumentList9
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item7 is { } item7 ? item7.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item8 is { } item8 ? item8.GetHashCode() : 0);
             return hashCode;
         }
@@ -9413,37 +10178,77 @@ public sealed record ArgumentListS9 : ArgumentList9
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 7 ? 0 : (Item7 is { } item7 ? item7.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 8 ? 0 : (Item8 is { } item8 ? item8.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract record ArgumentList10 : ArgumentList
 {
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public override int Length => 10;
 
     protected static Type?[] CreateNonDefaultItemTypes()
         => new Type?[10];
 }
 
-public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
+public sealed record ArgumentListG10<T0, T1, T2, T3> : ArgumentList10
 {
     private readonly ArgumentListType _type;
 
@@ -9451,7 +10256,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
     private T1 _item1;
     private T2 _item2;
     private T3 _item3;
-    private T4 _item4;
+    private object? _item4;
     private object? _item5;
     private object? _item6;
     private object? _item7;
@@ -9480,7 +10285,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         get => _item3;
         init => _item3 = value;
     }
-    public T4 Item4 {
+    public object? Item4 {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _item4;
         init => _item4 = value;
@@ -9521,7 +10326,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         _item1 = default!;
         _item2 = default!;
         _item3 = default!;
-        _item4 = default!;
+        _item4 = defaultValues[4];
         _item5 = defaultValues[5];
         _item6 = defaultValues[6];
         _item7 = defaultValues[7];
@@ -9529,7 +10334,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         _item9 = defaultValues[9];
     }
 
-    public ArgumentListG10(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, T4 item4, object? item5, object? item6, object? item7, object? item8, object? item9)
+    public ArgumentListG10(ArgumentListType type, T0 item0, T1 item1, T2 item2, T3 item3, object? item4, object? item5, object? item6, object? item7, object? item8, object? item9)
     {
         _type = type;
         _item0 = item0;
@@ -9547,7 +10352,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
     // Duplicate
 
     public override ArgumentList Duplicate()
-        => new ArgumentListG10<T0, T1, T2, T3, T4>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6, Item7, Item8, Item9);
+        => new ArgumentListG10<T0, T1, T2, T3>(_type, Item0, Item1, Item2, Item3, Item4, Item5, Item6, Item7, Item8, Item9);
 
     // ToString & ToArray
 
@@ -9631,9 +10436,10 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
                 itemTypes[3] = itemType;
             }
         }
-        if (!typeof(T4).IsValueType) {
+        expectedItemType = _type.ItemTypes[4];
+        if (!expectedItemType.IsValueType) {
             itemType = _item4?.GetType();
-            if (itemType != null && itemType != typeof(T4)) {
+            if (itemType != null && itemType != expectedItemType) {
                 itemTypes ??= CreateNonDefaultItemTypes();
                 itemTypes[4] = itemType;
             }
@@ -9689,7 +10495,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             1 => typeof(T1),
             2 => typeof(T2),
             3 => typeof(T3),
-            4 => typeof(T4),
+            4 => _type.ItemTypes[4],
             5 => _type.ItemTypes[5],
             6 => _type.ItemTypes[6],
             7 => _type.ItemTypes[7],
@@ -9701,15 +10507,35 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
     public override T Get7<T>() => Item7 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get7Untyped() => Item7;
     public override T Get8<T>() => Item8 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get8Untyped() => Item8;
     public override T Get9<T>() => Item9 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get9Untyped() => Item9;
 
     public override T Get<T>(int index)
         => index switch {
@@ -9763,7 +10589,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             7 => Item7 is CancellationToken value ? value : default!,
             8 => Item8 is CancellationToken value ? value : default!,
             9 => Item9 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -9784,7 +10610,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -9822,7 +10648,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             _item3 = item is T3 item3 ? item3 : default!;
             break;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
+            _item4 = _type.CastItem(4, item);
             break;
         case 5:
             _item5 = _type.CastItem(5, item);
@@ -9849,36 +10675,34 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         switch (index) {
         case 0:
             _item0 = item is T0 item0 ? item0 : default!;
-            break;
+            return;
         case 1:
             _item1 = item is T1 item1 ? item1 : default!;
-            break;
+            return;
         case 2:
             _item2 = item is T2 item2 ? item2 : default!;
-            break;
+            return;
         case 3:
             _item3 = item is T3 item3 ? item3 : default!;
-            break;
+            return;
         case 4:
-            _item4 = item is T4 item4 ? item4 : default!;
-            break;
+            _item4 = _type.CastItem(4, item);
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
+            return;
         case 7:
             _item7 = _type.CastItem(7, item);
-            break;
+            return;
         case 8:
             _item8 = _type.CastItem(8, item);
-            break;
+            return;
         case 9:
             _item9 = _type.CastItem(9, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -9886,7 +10710,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
 
     public override void SetFrom(ArgumentList other)
     {
-        if (other is ArgumentListG10<T0, T1, T2, T3, T4> vOther) {
+        if (other is ArgumentListG10<T0, T1, T2, T3> vOther) {
             _item0 = vOther._item0;
             _item1 = vOther._item1;
             _item2 = vOther._item2;
@@ -9903,7 +10727,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             _item1 = other.Get1<T1>();
             _item2 = other.Get2<T2>();
             _item3 = other.Get3<T3>();
-            _item4 = other.Get4<T4>();
+            _item4 = _type.CastItem(4, other.GetUntyped(4));
             _item5 = _type.CastItem(5, other.GetUntyped(5));
             _item6 = _type.CastItem(6, other.GetUntyped(6));
             _item7 = _type.CastItem(7, other.GetUntyped(7));
@@ -9974,6 +10798,8 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item3")!.GetGetMethod()!);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item4")!.GetGetMethod()!);
+                itemType = type.ItemTypes[4];
+                il.Emit(itemType.IsValueType ? OpCodes.Unbox_Any : OpCodes.Castclass, itemType);
                 il.Emit(OpCodes.Ldloc_0);
                 il.Emit(OpCodes.Call, type.ListType.GetProperty("Item5")!.GetGetMethod()!);
                 itemType = type.ItemTypes[5];
@@ -10049,7 +10875,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
                                 , Expression.PropertyOrField(vList, "Item1")
                                 , Expression.PropertyOrField(vList, "Item2")
                                 , Expression.PropertyOrField(vList, "Item3")
-                                , Expression.PropertyOrField(vList, "Item4")
+                                , Expression.Convert(Expression.PropertyOrField(vList, "Item4"), type.ItemTypes[4])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item5"), type.ItemTypes[5])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item6"), type.ItemTypes[6])
                                 , Expression.Convert(Expression.PropertyOrField(vList, "Item7"), type.ItemTypes[7])
@@ -10065,7 +10891,6 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -10085,10 +10910,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             reader.OnStruct(_item3, 3);
         else
             reader.OnClass(typeof(T3), _item3, 3);
-        if (typeof(T4).IsValueType)
-            reader.OnStruct(_item4, 4);
-        else
-            reader.OnClass(typeof(T4), _item4, 4);
+        reader.OnAny(itemTypes[4], _item4, 4);
         reader.OnAny(itemTypes[5], _item5, 5);
         reader.OnAny(itemTypes[6], _item6, 6);
         reader.OnAny(itemTypes[7], _item7, 7);
@@ -10096,7 +10918,6 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         reader.OnAny(itemTypes[9], _item9, 9);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -10117,10 +10938,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             _item3 = writer.OnStruct<T3>(3);
         else
             _item3 = (T3)writer.OnClass(typeof(T3), 3)!;
-        if (typeof(T4).IsValueType)
-            _item4 = writer.OnStruct<T4>(4);
-        else
-            _item4 = (T4)writer.OnClass(typeof(T4), 4)!;
+        _item4 = writer.OnAny(itemTypes[4], 4, defaultValues[4]);
         _item5 = writer.OnAny(itemTypes[5], 5, defaultValues[5]);
         _item6 = writer.OnAny(itemTypes[6], 6, defaultValues[6]);
         _item7 = writer.OnAny(itemTypes[7], 7, defaultValues[7]);
@@ -10130,7 +10948,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
 
     // Equality
 
-    public bool Equals(ArgumentListG10<T0, T1, T2, T3, T4>? other)
+    public bool Equals(ArgumentListG10<T0, T1, T2, T3>? other)
     {
         if (other == null)
             return false;
@@ -10145,7 +10963,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             return false;
         if (!Equals(Item5, other.Item5))
             return false;
-        if (!EqualityComparer<T4>.Default.Equals(Item4, other.Item4))
+        if (!Equals(Item4, other.Item4))
             return false;
         if (!EqualityComparer<T3>.Default.Equals(Item3, other.Item3))
             return false;
@@ -10160,7 +10978,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
 
     public override bool Equals(ArgumentList? other, int skipIndex)
     {
-        if (other is not ArgumentListG10<T0, T1, T2, T3, T4> vOther)
+        if (other is not ArgumentListG10<T0, T1, T2, T3> vOther)
             return false;
 
         if (skipIndex != 9 && !Equals(Item9, vOther.Item9))
@@ -10173,7 +10991,7 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
             return false;
         if (skipIndex != 5 && !Equals(Item5, vOther.Item5))
             return false;
-        if (skipIndex != 4 && !EqualityComparer<T4>.Default.Equals(Item4, vOther.Item4))
+        if (skipIndex != 4 && !Equals(Item4, vOther.Item4))
             return false;
         if (skipIndex != 3 && !EqualityComparer<T3>.Default.Equals(Item3, vOther.Item3))
             return false;
@@ -10191,23 +11009,59 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item7 is { } item7 ? item7.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item8 is { } item8 ? item8.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 21) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item9 is { } item9 ? item9.GetHashCode() : 0);
             return hashCode;
         }
@@ -10218,29 +11072,69 @@ public sealed record ArgumentListG10<T0, T1, T2, T3, T4> : ArgumentList10
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 7 ? 0 : (Item7 is { } item7 ? item7.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 8 ? 0 : (Item8 is { } item8 ? item8.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 21) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 9 ? 0 : (Item9 is { } item9 ? item9.GetHashCode() : 0));
             return hashCode;
         }
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2046", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2080", Justification = "We assume ArgumentList code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public sealed record ArgumentListS10 : ArgumentList10
 {
     private readonly ArgumentListType _type;
@@ -10504,15 +11398,35 @@ public sealed record ArgumentListS10 : ArgumentList10
     // Get
 
     public override T Get0<T>() => Item0 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get0Untyped() => Item0;
     public override T Get1<T>() => Item1 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get1Untyped() => Item1;
     public override T Get2<T>() => Item2 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get2Untyped() => Item2;
     public override T Get3<T>() => Item3 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get3Untyped() => Item3;
     public override T Get4<T>() => Item4 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get4Untyped() => Item4;
     public override T Get5<T>() => Item5 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get5Untyped() => Item5;
     public override T Get6<T>() => Item6 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get6Untyped() => Item6;
     public override T Get7<T>() => Item7 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get7Untyped() => Item7;
     public override T Get8<T>() => Item8 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get8Untyped() => Item8;
     public override T Get9<T>() => Item9 is T value ? value : default!;
+    // ReSharper disable once HeapView.PossibleBoxingAllocation
+    public override object? Get9Untyped() => Item9;
 
     public override T Get<T>(int index)
         => index switch {
@@ -10566,7 +11480,7 @@ public sealed record ArgumentListS10 : ArgumentList10
             7 => Item7 is CancellationToken value ? value : default!,
             8 => Item8 is CancellationToken value ? value : default!,
             9 => Item9 is CancellationToken value ? value : default!,
-            _ => throw new ArgumentOutOfRangeException(nameof(index))
+            _ => default,
         };
 
     // Set
@@ -10652,36 +11566,34 @@ public sealed record ArgumentListS10 : ArgumentList10
         switch (index) {
         case 0:
             _item0 = _type.CastItem(0, item);
-            break;
+            return;
         case 1:
             _item1 = _type.CastItem(1, item);
-            break;
+            return;
         case 2:
             _item2 = _type.CastItem(2, item);
-            break;
+            return;
         case 3:
             _item3 = _type.CastItem(3, item);
-            break;
+            return;
         case 4:
             _item4 = _type.CastItem(4, item);
-            break;
+            return;
         case 5:
             _item5 = _type.CastItem(5, item);
-            break;
+            return;
         case 6:
             _item6 = _type.CastItem(6, item);
-            break;
+            return;
         case 7:
             _item7 = _type.CastItem(7, item);
-            break;
+            return;
         case 8:
             _item8 = _type.CastItem(8, item);
-            break;
+            return;
         case 9:
             _item9 = _type.CastItem(9, item);
-            break;
-        default:
-            throw new ArgumentOutOfRangeException(nameof(index));
+            return;
         }
     }
 
@@ -10878,7 +11790,6 @@ public sealed record ArgumentListS10 : ArgumentList10
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     {
         var itemTypes = _type.ItemTypes;
@@ -10894,7 +11805,6 @@ public sealed record ArgumentListS10 : ArgumentList10
         reader.OnAny(itemTypes[9], _item9, 9);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     {
         var itemTypes = _type.ItemTypes;
@@ -10974,23 +11884,59 @@ public sealed record ArgumentListS10 : ArgumentList10
         unchecked {
             var hashCode =
                 (Item0 is { } item0 ? item0.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item1 is { } item1 ? item1.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item2 is { } item2 ? item2.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item3 is { } item3 ? item3.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item4 is { } item4 ? item4.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item5 is { } item5 ? item5.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item6 is { } item6 ? item6.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item7 is { } item7 ? item7.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item8 is { } item8 ? item8.GetHashCode() : 0);
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 21) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (Item9 is { } item9 ? item9.GetHashCode() : 0);
             return hashCode;
         }
@@ -11001,23 +11947,59 @@ public sealed record ArgumentListS10 : ArgumentList10
         unchecked {
             var hashCode =
                 (skipIndex == 0 ? 0 : (Item0 is { } item0 ? item0.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 13) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 1 ? 0 : (Item1 is { } item1 ? item1.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 26) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 2 ? 0 : (Item2 is { } item2 ? item2.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 7) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 3 ? 0 : (Item3 is { } item3 ? item3.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 20) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 4 ? 0 : (Item4 is { } item4 ? item4.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 1) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 5 ? 0 : (Item5 is { } item5 ? item5.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 14) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 6 ? 0 : (Item6 is { } item6 ? item6.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 27) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 7 ? 0 : (Item7 is { } item7 ? item7.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 8) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 8 ? 0 : (Item8 is { } item8 ? item8.GetHashCode() : 0));
+#if NETCOREAPP3_1_OR_GREATER
+            hashCode = (int)BitOperations.RotateLeft((uint)hashCode, 21) +
+#else
             hashCode = 397*hashCode +
+#endif
                 (skipIndex == 9 ? 0 : (Item9 is { } item9 ? item9.GetHashCode() : 0));
             return hashCode;
         }

@@ -32,7 +32,7 @@ public static class ServiceProviderExt
     }
 
     public static ILogger<T> LogFor<T>(this IServiceProvider services)
-        => new Logger<T>(services.LoggerFactory());
+        => new Logger<T>(services.LoggerFactory()); // See ILoggerFactory.CreateLogger<T>()
     public static ILogger LogFor(this IServiceProvider services, Type type)
         => services.LoggerFactory().CreateLogger(type.NonProxyType());
     public static ILogger LogFor(this IServiceProvider services, string category)
@@ -70,19 +70,6 @@ public static class ServiceProviderExt
         Type type,
         params object[] arguments)
         => services.GetService(type) ?? services.CreateInstance(type);
-
-    // GetRequiredMixedModeService
-
-    public static T GetRequiredMixedModeService<T>(this IServiceProvider services)
-        where T : class
-    {
-        var singleton = services.GetRequiredService<MixedModeService<T>.Singleton>();
-        if (ReferenceEquals(singleton.Services, services))
-            return singleton.Service;
-
-        var scoped = services.GetRequiredService<MixedModeService<T>.Scoped>();
-        return scoped.Service;
-    }
 
     // Nested types
 

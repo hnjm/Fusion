@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.CommandR.Internal;
+using ActualLab.OS;
 
 namespace ActualLab.CommandR.Configuration;
 
@@ -15,7 +16,7 @@ public class CommandHandlerResolver
 
     protected Options Settings { get; }
     protected Func<CommandHandler, Type, bool> Filter { get; }
-    protected ConcurrentDictionary<Type, CommandHandlerSet> Cache { get; } = new();
+    protected ConcurrentDictionary<Type, CommandHandlerSet> Cache { get; } = new(HardwareInfo.ProcessorCountPo2, 131);
 
     public CommandHandlerResolver(Options settings, IServiceProvider services)
     {
@@ -27,15 +28,14 @@ public class CommandHandlerResolver
         Filter = (commandHandler, type) => filters.All(f => f.IsCommandHandlerUsed(commandHandler, type));
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "We assume all command handling code is preserved")]
     public virtual CommandHandlerSet GetCommandHandlers(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type commandType)
         => Cache.GetOrAdd(commandType, static (commandType1, self) => {
             if (!typeof(ICommand).IsAssignableFrom(commandType1))
                 throw new ArgumentOutOfRangeException(nameof(commandType1));
 
-#pragma warning disable IL2067
             var baseTypes = commandType1.GetAllBaseTypes(true, true)
-#pragma warning restore IL2067
                 .Select((type, index) => (Type: type, Index: index))
                 .ToArray();
             var handlers = (
@@ -61,7 +61,7 @@ public class CommandHandlerResolver
                     from nonFilterHandler in nonFilterHandlers
                     let handlerSubset = handlers.Where(h => h.IsFilter || h == nonFilterHandler).ToArray()
                     select KeyValuePair.Create(nonFilterHandler.Id, new CommandHandlerChain(handlerSubset))
-                ).ToImmutableDictionary();
+                ).ToImmutableDictionary(StringComparer.Ordinal);
                 return new CommandHandlerSet(commandType1, handlerChains);
             }
 

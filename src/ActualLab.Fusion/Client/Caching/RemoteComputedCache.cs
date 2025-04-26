@@ -1,7 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using ActualLab.Fusion.Interception;
-using ActualLab.Internal;
+using ActualLab.Rpc;
 using ActualLab.Rpc.Caching;
 using ActualLab.Rpc.Infrastructure;
 using ActualLab.Rpc.Serialization;
@@ -10,7 +8,7 @@ namespace ActualLab.Fusion.Client.Caching;
 
 public abstract partial class RemoteComputedCache : RpcServiceBase, IRemoteComputedCache
 {
-    public static RpcCacheKey VersionKey { get; set; } = new("", "Version", TextOrBytes.EmptyBytes);
+    public static RpcCacheKey VersionKey { get; set; } = new("Version", default);
 
     public record Options(string Version = "")
     {
@@ -20,6 +18,7 @@ public abstract partial class RemoteComputedCache : RpcServiceBase, IRemoteCompu
     }
 
     protected RpcArgumentSerializer ArgumentSerializer;
+    protected RpcMethodResolver AnyMethodResolver;
     protected ILogger? DefaultLog;
 
     public Options Settings { get; }
@@ -30,7 +29,8 @@ public abstract partial class RemoteComputedCache : RpcServiceBase, IRemoteCompu
     {
         Settings = settings;
         DefaultLog = Log.IfEnabled(Settings.LogLevel);
-        ArgumentSerializer = Hub.InternalServices.ArgumentSerializer;
+        ArgumentSerializer = Hub.InternalServices.SerializationFormats.GetDefault(false).ArgumentSerializer;
+        AnyMethodResolver = Hub.ServiceRegistry.AnyMethodResolver;
         if (initialize)
             // ReSharper disable once VirtualMemberCallInConstructor
 #pragma warning disable MA0040, CA2214
@@ -45,10 +45,10 @@ public abstract partial class RemoteComputedCache : RpcServiceBase, IRemoteCompu
             return;
         }
 
-        var expectedData = new TextOrBytes(Encoding.UTF8.GetBytes(version));
+        var expectedData = EncodingExt.Utf8NoBom.GetBytes(version);
         var entry = await Get(VersionKey, cancellationToken).ConfigureAwait(false);
         if (!entry.IsNone) {
-            if (entry.Data.DataEquals(expectedData)) {
+            if (entry.Data.Span.SequenceEqual(expectedData)) {
                 DefaultLog?.Log(Settings.LogLevel, "Initialize: version match -> will reuse cache content");
                 return;
             }
@@ -59,12 +59,9 @@ public abstract partial class RemoteComputedCache : RpcServiceBase, IRemoteCompu
         Set(VersionKey, new RpcCacheValue(expectedData, ""));
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    public async ValueTask<RpcCacheEntry<T>?> Get<T>(
-        ComputeMethodInput input, RpcCacheKey key, CancellationToken cancellationToken)
+    public async ValueTask<RpcCacheEntry?> Get(ComputeMethodInput input, RpcCacheKey key, CancellationToken cancellationToken)
     {
-        var serviceDef = Hub.ServiceRegistry.Get(key.Service);
-        var methodDef = serviceDef?.GetMethod(key.Method);
+        var methodDef = AnyMethodResolver[key.Name];
         if (methodDef == null)
             return null;
 
@@ -80,11 +77,12 @@ public abstract partial class RemoteComputedCache : RpcServiceBase, IRemoteCompu
 
             DefaultLog?.Log(Settings.LogLevel, "[?] {Key} -> hit", key);
             var resultList = methodDef.ResultListType.Factory.Invoke();
-            ArgumentSerializer.Deserialize(ref resultList, methodDef.AllowResultPolymorphism, entry.Data);
-            return new RpcCacheEntry<T>(key, entry, resultList.Get0<T>());
+            ArgumentSerializer.Deserialize(ref resultList, methodDef.HasPolymorphicResult, entry.Data);
+            return new RpcCacheEntry(key, entry, resultList.Get0Untyped());
         }
         catch (Exception e) when (!e.IsCancellationOf(cancellationToken)) {
-            Log.LogError(e, "Cached result read failed");
+            Log.LogWarning("Read failed for key `{Key}`: {Type}({Message})",
+                key, e.GetType().GetName(), e.Message);
             return null;
         }
     }

@@ -16,14 +16,13 @@ public class ComputeServiceCommandCompletionInvalidator(
         public LogLevel LogLevel { get; init; } = LogLevel.Debug;
     }
 
-    private CommandHandlerResolver? _commandHandlerResolver;
-    private ILogger? _log;
-
     protected IServiceProvider Services { get; } = services;
     protected Options Settings { get; } = settings;
+    [field: AllowNull, MaybeNull]
     protected CommandHandlerResolver CommandHandlerResolver
-        => _commandHandlerResolver ??= Services.GetRequiredService<CommandHandlerResolver>();
-    protected ILogger Log => _log ??= Services.LogFor(GetType());
+        => field ??= Services.GetRequiredService<CommandHandlerResolver>();
+    [field: AllowNull, MaybeNull]
+    protected ILogger Log => field ??= Services.LogFor(GetType());
 
     [CommandFilter(Priority = FusionOperationsCommandHandlerPriority.ComputeServiceCommandCompletionInvalidator)]
     public async Task OnCommand(ICompletion completion, CommandContext context, CancellationToken cancellationToken)
@@ -39,12 +38,12 @@ public class ComputeServiceCommandCompletionInvalidator(
         Log.IfEnabled(Settings.LogLevel)
             ?.Log(Settings.LogLevel, "Invalidating: {CommandType}", command.GetType());
 
+        // "Finally" block disposes everything here
         var activity = StartActivity(command);
         var operationItems = operation.Items;
         var oldOperation = context.TryGetOperation();
         context.ChangeOperation(operation);
         var invalidateScope = Invalidation.Begin();
-        var suppressRpcScope = SuppressRpc();
         try {
             // If we care only about the eventual consistency, the invalidation order
             // doesn't matter:
@@ -66,7 +65,6 @@ public class ComputeServiceCommandCompletionInvalidator(
             throw;
         }
         finally {
-            suppressRpcScope.Dispose();
             invalidateScope.Dispose();
             context.ChangeOperation(oldOperation);
             activity?.Dispose();
@@ -125,13 +123,5 @@ public class ComputeServiceCommandCompletionInvalidator(
             activity.AddEvent(activityEvent);
         }
         return activity;
-    }
-
-    protected static RpcOutboundContext.Scope SuppressRpc()
-    {
-        var context = new RpcOutboundContext() {
-            Suppressor = static (method, _) => TaskExt.FromDefaultResult(method.UnwrappedReturnType),
-        };
-        return context.Activate();
     }
 }

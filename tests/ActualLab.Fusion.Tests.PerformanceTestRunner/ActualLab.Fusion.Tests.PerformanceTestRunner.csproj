@@ -2,11 +2,10 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks Condition="$(UseMultitargeting)">net8.0;net7.0;net6.0;net5.0;netcoreapp3.1</TargetFrameworks>
+    <TargetFrameworks Condition="$(UseMultitargeting)">net9.0;net8.0;net7.0;net6.0;net5.0;netcoreapp3.1</TargetFrameworks>
     <!--
-    <TargetFrameworks Condition="$(UseMultitargeting)">net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;net48;net471</TargetFrameworks>
+    <TargetFrameworks Condition="$(UseMultitargeting)">net9.0;net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;net48;net471</TargetFrameworks>
     -->
-    <TargetFramework Condition="!$(UseMultitargeting)">net8.0</TargetFramework>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -17,6 +16,8 @@
     <TieredPGO>true</TieredPGO>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <RetainVMGarbageCollection>true</RetainVMGarbageCollection>
+    <GarbageCollectionAdaptationMode>0</GarbageCollectionAdaptationMode>
+    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,8 +25,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Remove="xunit.runner.visualstudio" />
     <PackageReference Remove="Microsoft.NET.Test.Sdk" />
+    <PackageReference Remove="xunit.runner.visualstudio" />
   </ItemGroup>
 
 </Project>

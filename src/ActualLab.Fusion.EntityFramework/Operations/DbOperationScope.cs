@@ -1,10 +1,14 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.CommandR.Operations;
 using ActualLab.Fusion.EntityFramework.Internal;
+using ActualLab.Fusion.EntityFramework.LogProcessing;
 using ActualLab.Locking;
 using ActualLab.Resilience;
+using ActualLab.Versioning;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ActualLab.Fusion.EntityFramework.Operations;
@@ -18,11 +22,14 @@ public abstract class DbOperationScope : IOperationScope
         public IsolationLevel IsolationLevel { get; init; } = DefaultIsolationLevel;
     }
 
+    protected TaskCompletionSource<Unit>? StrategyOperationTaskSource { get; set; }
+    protected Task? StrategyExecuteTask { get; set; }
+
     public IsolationLevel IsolationLevel { get; protected init; }
     public CommandContext CommandContext { get; protected init; } = null!;
     protected IServiceProvider Services => CommandContext.Services;
     public Operation Operation { get; protected init; } = null!;
-    public DbShard Shard { get; protected set; }
+    public string Shard { get; protected set; } = DbShard.Single;
     public bool IsTransient => false;
     public bool IsUsed => MasterDbContext != null;
     public bool? IsCommitted { get; protected set; }
@@ -32,6 +39,7 @@ public abstract class DbOperationScope : IOperationScope
     public DbConnection? Connection { get; protected set; }
     public IDbContextTransaction? Transaction { get; protected set; }
     public string? TransactionId { get; protected set; }
+    public IExecutionStrategy? ExecutionStrategy { get; protected set; }
 
     public static DbOperationScope? TryGet(CommandContext context)
         => context.TryGetOperation()?.Scope as DbOperationScope;
@@ -46,16 +54,14 @@ public class DbOperationScope<TDbContext> : DbOperationScope
 {
     public new record Options : DbOperationScope.Options;
 
-    private IDbShardRegistry<TDbContext>? _shardRegistry;
-    private IShardDbContextFactory<TDbContext>? _contextFactory;
-    private TDbContext? _masterDbContext;
-
     protected DbHub<TDbContext> DbHub { get; }
     protected HostId HostId { get; }
+    [field: AllowNull, MaybeNull]
     protected IDbShardRegistry<TDbContext> ShardRegistry
-        => _shardRegistry ??= Services.GetRequiredService<IDbShardRegistry<TDbContext>>();
+        => field ??= Services.GetRequiredService<IDbShardRegistry<TDbContext>>();
+    [field: AllowNull, MaybeNull]
     protected IShardDbContextFactory<TDbContext> ContextFactory
-        => _contextFactory ??= Services.GetRequiredService<IShardDbContextFactory<TDbContext>>();
+        => field ??= Services.GetRequiredService<IShardDbContextFactory<TDbContext>>();
     protected MomentClockSet Clocks { get; }
     protected ILogger Log { get; }
     protected ILogger? DebugLog => Log.IfEnabled(LogLevel.Debug);
@@ -63,9 +69,9 @@ public class DbOperationScope<TDbContext> : DbOperationScope
     protected AsyncLock AsyncLock { get; }
 
     public new TDbContext? MasterDbContext {
-        get => _masterDbContext;
+        get;
         protected set {
-            _masterDbContext = value;
+            field = value;
             base.MasterDbContext = value;
         }
     }
@@ -121,6 +127,7 @@ public class DbOperationScope<TDbContext> : DbOperationScope
         }
         finally {
             IsCommitted ??= false;
+            await TryDetachExecutionStrategy().ConfigureAwait(false);
             try {
                 if (MasterDbContext is IAsyncDisposable ad)
                     await ad.DisposeAsync().ConfigureAwait(false);
@@ -134,7 +141,7 @@ public class DbOperationScope<TDbContext> : DbOperationScope
     }
 
     public virtual async ValueTask InitializeDbContext(
-        TDbContext dbContext, DbShard shard, CancellationToken cancellationToken = default)
+        TDbContext dbContext, string shard, CancellationToken cancellationToken = default)
     {
         // This code must run in the same execution context to work, so
         // we run it first
@@ -144,7 +151,7 @@ public class DbOperationScope<TDbContext> : DbOperationScope
 
         if (MasterDbContext == null) // !IsUsed
             await CreateMasterDbContext(shard, cancellationToken).ConfigureAwait(false);
-        else if (Shard != shard)
+        else if (!string.Equals(Shard, shard, StringComparison.Ordinal))
             throw Errors.WrongDbOperationScopeShard(GetType(), Shard, shard);
 
         var database = dbContext.Database;
@@ -183,22 +190,49 @@ public class DbOperationScope<TDbContext> : DbOperationScope
                 throw ActualLab.Fusion.Operations.Internal.Errors.OperationHasNoCommand();
 
             var dbContext = MasterDbContext;
-            dbContext.EnableChangeTracking(false); // Just to speed up things a bit
-            if (Operation.Events.Count != 0) {
-                var eventVersion = DbHub.VersionGenerator.NextVersion();
-                foreach (var operationEvent in Operation.Events) {
-                    if (ReferenceEquals(operationEvent.Value, null))
-                        continue; // We don't store events with null values
+            if (dbContext.ChangeTracker.HasChanges())
+                throw ActualLab.Internal.Errors.InternalError(
+                    "MasterDbContext has some unsaved changes, which isn't expected here.");
 
-                    var dbEvent = new DbEvent(operationEvent) {
-                        Version = eventVersion, // Just to avoid extra calls to NextVersion
-                    };
-                    dbContext.Add(dbEvent);
-                    HasEvents = true;
+            // We'll manually add/update entities here
+            dbContext.EnableChangeTracking(false);
+            if (Operation.Events.Count != 0) {
+                var events = new Dictionary<string, OperationEvent>(StringComparer.Ordinal);
+                // We "clean up" the events first by getting rid of duplicates there
+                foreach (var e in Operation.Events) {
+                    if (ReferenceEquals(e.Value, null))
+                        continue; // Events with null values cannot be processed
+
+                    events[e.Uuid] = e;
+                }
+                HasEvents = events.Count != 0;
+                var orderedEvents = events.Values.OrderBy(x => x.Uuid, StringComparer.Ordinal);
+                var dbEvents = dbContext.Set<DbEvent>();
+                foreach (var e in orderedEvents) {
+                    var dbEvent = new DbEvent(e, DbHub.VersionGenerator);
+                    var conflictStrategy = e.UuidConflictStrategy;
+                    if (conflictStrategy == KeyConflictStrategy.Fail)
+                        dbEvents.Add(dbEvent);
+                    else {
+                        var existingDbEvent = await dbEvents
+                            .FindAsync(DbKey.Compose(dbEvent.Uuid), cancellationToken)
+                            .ConfigureAwait(false);
+                        if (existingDbEvent == null)
+                            dbEvents.Add(dbEvent);
+                        else if (conflictStrategy == KeyConflictStrategy.Update) {
+                            if (existingDbEvent.State != LogEntryState.New)
+                                throw KeyConflictResolver.Error<DbEvent>();
+
+                            dbEvents.Attach(existingDbEvent);
+                            existingDbEvent.UpdateFrom(e, DbHub.VersionGenerator);
+                            dbEvents.Update(existingDbEvent);
+                        }
+                    }
                 }
             }
             var dbOperation = new DbOperation(Operation);
             dbContext.Add(dbOperation);
+
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             if (!dbOperation.HasIndex)
                 throw Errors.DbOperationIndexWasNotAssigned();
@@ -248,9 +282,10 @@ public class DbOperationScope<TDbContext> : DbOperationScope
             return true;
 
         try {
-            var executionStrategy = MasterDbContext?.Database.CreateExecutionStrategy();
+            var executionStrategy = ExecutionStrategy ?? MasterDbContext?.Database.CreateExecutionStrategy();
             if (executionStrategy is not ExecutionStrategy retryingExecutionStrategy)
                 return false;
+
             var isTransient = retryingExecutionStrategy.ShouldRetryOn(error);
             return isTransient;
         }
@@ -258,7 +293,7 @@ public class DbOperationScope<TDbContext> : DbOperationScope
             // scope.MasterDbContext?.Database may throw this exception
             Log.LogWarning(e, "IsTransientFailure resorts to temporary {DbContext}", typeof(TDbContext).Name);
             try {
-                var shard = ShardRegistry.HasSingleShard ? default : DbShard.Template;
+                var shard = ShardRegistry.HasSingleShard ? DbShard.Single : DbShard.Template;
                 using var tmpDbContext = ContextFactory.CreateDbContext(shard);
                 var executionStrategy = tmpDbContext.Database.CreateExecutionStrategy();
                 return executionStrategy is ExecutionStrategy retryingExecutionStrategy
@@ -274,12 +309,15 @@ public class DbOperationScope<TDbContext> : DbOperationScope
 
     // Protected methods
 
-    protected virtual async ValueTask CreateMasterDbContext(DbShard shard, CancellationToken cancellationToken)
+    protected virtual async ValueTask CreateMasterDbContext(string shard, CancellationToken cancellationToken)
     {
         var dbContext = await ContextFactory.CreateDbContextAsync(shard, cancellationToken).ConfigureAwait(false);
         try {
             var database = dbContext.ReadWrite().Database;
             database.DisableAutoTransactionsAndSavepoints();
+            // ExecutionStrategy is "attached" here mostly for compatibility/safety reasons -
+            // it works even if the next line is commented out.
+            AttachExecutionStrategy(dbContext.Database);
             var transaction = await database
                 .BeginTransactionAsync(IsolationLevel, cancellationToken)
                 .ConfigureAwait(false);
@@ -299,6 +337,7 @@ public class DbOperationScope<TDbContext> : DbOperationScope
                 TransactionId, shard, IsolationLevel);
         }
         catch (Exception) {
+            await TryDetachExecutionStrategy().ConfigureAwait(false);
             await dbContext.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -318,6 +357,33 @@ public class DbOperationScope<TDbContext> : DbOperationScope
 
         DebugLog?.LogDebug("Transaction #{TransactionId} @ shard '{Shard}': rolling back", TransactionId, Shard);
         await Transaction!.RollbackAsync().ConfigureAwait(false);
+    }
+
+    protected virtual void AttachExecutionStrategy(DatabaseFacade database)
+    {
+        ExecutionStrategy = database.CreateExecutionStrategy();
+        StrategyOperationTaskSource = TaskCompletionSourceExt.New<Unit>(runContinuationsAsynchronously: false);
+        StrategyExecuteTask = ExecutionStrategy.ExecuteAsync(
+            (Task)StrategyOperationTaskSource.Task,
+            static (operationTask, _) => operationTask,
+            default);
+    }
+
+    protected virtual async ValueTask TryDetachExecutionStrategy()
+    {
+        if (ExecutionStrategy == null)
+            return;
+
+        try {
+            StrategyOperationTaskSource?.TrySetResult(default);
+            if (StrategyExecuteTask is { } strategyResultTask)
+                await strategyResultTask.SilentAwait();
+        }
+        finally {
+            StrategyExecuteTask = null;
+            StrategyOperationTaskSource = null;
+            ExecutionStrategy = null;
+        }
     }
 
     // Helpers
@@ -341,4 +407,6 @@ public class DbOperationScope<TDbContext> : DbOperationScope
             .Aggregate(IsolationLevel.Unspecified, (x, y) => x.Max(y));
         return isolationLevel;
     }
+
+
 }

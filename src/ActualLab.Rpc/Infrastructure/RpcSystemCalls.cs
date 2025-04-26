@@ -1,47 +1,43 @@
-using System.Diagnostics.CodeAnalysis;
 using ActualLab.Interception;
 using ActualLab.Rpc.Internal;
+using ActualLab.Rpc.Serialization;
 using Errors = ActualLab.Rpc.Internal.Errors;
-using UnreferencedCode = ActualLab.Internal.UnreferencedCode;
 
 namespace ActualLab.Rpc.Infrastructure;
-
-#pragma warning disable IL2046
 
 public interface IRpcSystemCalls : IRpcSystemService
 {
     // Handshake & Reconnected
-    Task<RpcNoWait> Handshake(RpcHandshake handshake);
-    Task<byte[]> Reconnect(
+    public Task<RpcNoWait> Handshake(RpcHandshake handshake);
+    public Task<byte[]> Reconnect(
         int handshakeIndex, Dictionary<int, byte[]> completedStagesData, CancellationToken cancellationToken);
 
     // Regular calls
-    Task<RpcNoWait> Ok(object? result);
-    Task<RpcNoWait> Error(ExceptionInfo error);
-    Task<RpcNoWait> Cancel();
-    Task<RpcNoWait> M(); // Match
-    Task<Unit> NotFound(string serviceName, string methodName);
+    public Task<RpcNoWait> Ok(object? result);
+    public Task<RpcNoWait> Error(ExceptionInfo error);
+    public Task<RpcNoWait> Cancel();
+    public Task<RpcNoWait> M(); // Match
+    public Task<Unit> NotFound(string serviceName, string methodName);
 
     // Objects
-    Task<RpcNoWait> KeepAlive(long[] localIds);
-    Task<RpcNoWait> Disconnect(long[] localIds);
+    public Task<RpcNoWait> KeepAlive(long[] localIds);
+    public Task<RpcNoWait> Disconnect(long[] localIds);
 
     // Streams
-    Task<RpcNoWait> Ack(long nextIndex, Guid hostId = default);
-    Task<RpcNoWait> AckEnd(Guid hostId = default);
-    Task<RpcNoWait> I(long index, object? item);
-    Task<RpcNoWait> B(long index, object? items);
-    Task<RpcNoWait> End(long index, ExceptionInfo error);
+    public Task<RpcNoWait> Ack(long nextIndex, Guid hostId = default);
+    public Task<RpcNoWait> AckEnd(Guid hostId = default);
+    public Task<RpcNoWait> I(long index, object? item);
+    public Task<RpcNoWait> B(long index, object? items);
+    public Task<RpcNoWait> End(long index, ExceptionInfo error);
 }
 
-public class RpcSystemCalls(IServiceProvider services)
-    : RpcServiceBase(services), IRpcSystemCalls, IRpcDynamicCallHandler
+public sealed class RpcSystemCalls(IServiceProvider services)
+    : RpcServiceBase(services), IRpcSystemCalls, IRpcCallArgumentValidator
 {
-    private static readonly Symbol OkMethodName = nameof(Ok);
-    private static readonly Symbol ItemMethodName = nameof(I);
-    private static readonly Symbol BatchMethodName = nameof(B);
-
-    public static readonly Symbol Name = "$sys";
+    public const string Name = "$sys";
+    public const string OkMethodName = nameof(Ok);
+    public const string ItemMethodName = nameof(I);
+    public const string BatchMethodName = nameof(B);
 
     public Task<RpcNoWait> Handshake(RpcHandshake handshake)
         => RpcNoWait.Tasks.Completed; // Does nothing: this call is processed inside RpcPeer.OnRun
@@ -81,7 +77,6 @@ public class RpcSystemCalls(IServiceProvider services)
         return Task.FromResult(result);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcNoWait> Ok(object? result)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -91,13 +86,17 @@ public class RpcSystemCalls(IServiceProvider services)
         return RpcNoWait.Tasks.Completed;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcNoWait> Error(ExceptionInfo error)
     {
         var context = RpcInboundContext.GetCurrent();
         var peer = context.Peer;
         var outboundCallId = context.Message.RelatedId;
-        peer.OutboundCalls.Get(outboundCallId)?.SetError(error.ToException()!, context);
+        var exception = error.ToException()!;
+        if (exception is RpcRerouteException) {
+            exception = Errors.GotRpcRerouteExceptionFromRemotePeer();
+            Log.LogError(exception, "Error(...) got RpcRerouteException from remote peer");
+        }
+        peer.OutboundCalls.Get(outboundCallId)?.SetError(exception, context);
         return RpcNoWait.Tasks.Completed;
     }
 
@@ -127,7 +126,6 @@ public class RpcSystemCalls(IServiceProvider services)
     public Task<Unit> NotFound(string serviceName, string methodName)
         => throw Errors.EndpointNotFound(serviceName, methodName);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public async Task<RpcNoWait> KeepAlive(long[] localIds)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -136,7 +134,6 @@ public class RpcSystemCalls(IServiceProvider services)
         return default;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcNoWait> Disconnect(long[] localIds)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -145,7 +142,6 @@ public class RpcSystemCalls(IServiceProvider services)
         return RpcNoWait.Tasks.Completed;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public async Task<RpcNoWait> Ack(long nextIndex, Guid hostId = default)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -158,11 +154,9 @@ public class RpcSystemCalls(IServiceProvider services)
         return default;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcNoWait> AckEnd(Guid hostId = default)
         => Ack(long.MaxValue, hostId);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcNoWait> I(long index, object? item)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -173,7 +167,6 @@ public class RpcSystemCalls(IServiceProvider services)
             : RpcNoWait.Tasks.Completed;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task<RpcNoWait> B(long index, object? items)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -184,7 +177,6 @@ public class RpcSystemCalls(IServiceProvider services)
             : RpcNoWait.Tasks.Completed;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Reflection)]
     public Task<RpcNoWait> End(long index, ExceptionInfo error)
     {
         var context = RpcInboundContext.GetCurrent();
@@ -197,38 +189,47 @@ public class RpcSystemCalls(IServiceProvider services)
 
     // IRpcDynamicCallHandler
 
-    public bool IsValidCall(RpcInboundContext context, ref ArgumentList arguments, ref bool allowPolymorphism)
+    public bool IsValidCall(RpcInboundContext context, ref ArgumentList arguments, ref bool needsArgumentPolymorphism)
     {
         var call = context.Call;
-        var methodName = call.MethodDef.Method.Name;
-        if (methodName == OkMethodName) {
+        RpcStream? stream;
+        var systemCallKind = call.MethodDef.SystemCallKind;
+        if (systemCallKind == RpcSystemCallKind.OtherOrNone) // Most frequent path
+            return false;
+
+        if (systemCallKind == RpcSystemCallKind.Ok) { // Next frequent path
             var outboundCall = context.Peer.OutboundCalls.Get(context.Message.RelatedId);
             if (outboundCall == null)
                 return false;
 
             var outboundMethodDef = outboundCall.MethodDef;
             arguments = outboundMethodDef.ResultListType.Factory.Invoke();
-            allowPolymorphism = outboundMethodDef.AllowResultPolymorphism;
+            needsArgumentPolymorphism = outboundMethodDef.HasPolymorphicResult;
             return true;
         }
-        if (methodName == ItemMethodName) {
-            var stream = context.Peer.RemoteObjects.Get(context.Message.RelatedId) as RpcStream;
+
+        if (systemCallKind == RpcSystemCallKind.Item) {
+            stream = context.Peer.RemoteObjects.Get(context.Message.RelatedId) as RpcStream;
             if (stream == null)
                 return false;
 
             arguments = stream.CreateStreamItemArguments();
-            allowPolymorphism = true;
+            needsArgumentPolymorphism = RpcArgumentSerializer.IsPolymorphic(stream.ItemType);
             return true;
         }
-        if (methodName == BatchMethodName) {
-            var stream = context.Peer.RemoteObjects.Get(context.Message.RelatedId) as RpcStream;
-            if (stream == null)
-                return false;
 
-            arguments = stream.CreateStreamBatchArguments();
-            allowPolymorphism = true;
-            return true;
-        }
-        return false;
+        // If we're here, systemCallKind == RpcSystemCallKind.Batch
+        stream = context.Peer.RemoteObjects.Get(context.Message.RelatedId) as RpcStream;
+        if (stream == null)
+            return false;
+
+        needsArgumentPolymorphism = RpcArgumentSerializer.IsPolymorphic(stream.ItemType);
+        arguments = needsArgumentPolymorphism
+            // We need to force polymorphic deserialization of the second argument in RpcArgumentSerializer
+            // in case TItem is polymorphic. TItem[] is non-abstract & non-object, so RpcArgumentSerializer
+            // won't use polymorphic deserialization for the second argument unless we "reset" its type to object.
+            ? ArgumentList.New<long, object>(0L, null!)
+            : stream.CreateStreamBatchArguments();
+        return true;
     }
 }

@@ -7,18 +7,17 @@ namespace ActualLab.Rpc.Infrastructure;
 
 public abstract class RpcObjectTracker
 {
-    private RpcPeer _peer = null!;
-
     protected RpcLimits Limits { get; private set; } = null!;
 
+    [field: AllowNull, MaybeNull]
     public RpcPeer Peer {
-        get => _peer;
+        get;
         protected set {
-            if (_peer != null)
+            if (field != null)
                 throw Errors.AlreadyInitialized(nameof(Peer));
 
-            _peer = value;
-            Limits = _peer.Hub.Limits;
+            field = value;
+            Limits = field.Hub.Limits;
         }
     }
 
@@ -30,12 +29,7 @@ public abstract class RpcObjectTracker
 
 public class RpcRemoteObjectTracker : RpcObjectTracker, IEnumerable<IRpcObject>
 {
-    // ReSharper disable once InconsistentNaming
-    public static GCHandlePool GCHandlePool { get; set; } = new(new GCHandlePool.Options() {
-        Capacity = HardwareInfo.GetProcessorCountPo2Factor(16),
-    });
-
-    private readonly ConcurrentDictionary<long, GCHandle> _objects = new();
+    private readonly ConcurrentDictionary<long, GCHandle> _objects = new(HardwareInfo.ProcessorCountPo2, 17);
 
     public override int Count => _objects.Count;
 
@@ -53,7 +47,6 @@ public class RpcRemoteObjectTracker : RpcObjectTracker, IEnumerable<IRpcObject>
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void Register(IRpcObject obj)
     {
         obj.RequireKind(RpcObjectKind.Remote);
@@ -75,7 +68,7 @@ public class RpcRemoteObjectTracker : RpcObjectTracker, IEnumerable<IRpcObject>
                 existingObj.Disconnect(); // This call must unregister it
             }
 
-            handle = GCHandlePool.Acquire(obj, obj.GetHashCode());
+            handle = GCHandle.Alloc(obj, GCHandleType.Weak);
             if (_objects.TryAdd(id.LocalId, handle))
                 return;
         }
@@ -94,11 +87,10 @@ public class RpcRemoteObjectTracker : RpcObjectTracker, IEnumerable<IRpcObject>
         if (!_objects.TryRemove(localId, handle))
             return false; // Concurrent Unregister won
 
-        GCHandlePool.Release(handle);
+        handle.Free();
         return true;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public async Task Maintain(RpcHandshake handshake, CancellationToken cancellationToken)
     {
         try {
@@ -128,14 +120,12 @@ public class RpcRemoteObjectTracker : RpcObjectTracker, IEnumerable<IRpcObject>
         // ReSharper disable once FunctionNeverReturns
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void Disconnect(params long[] localIds)
     {
         foreach (var localId in localIds)
             Get(localId)?.Disconnect();
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void Abort()
     {
         var objects = _objects.Values.Select(h => h.Target as IRpcObject).ToList();
@@ -160,7 +150,7 @@ public class RpcRemoteObjectTracker : RpcObjectTracker, IEnumerable<IRpcObject>
 
             foreach (var (id, handle) in purgeBuffer)
                 if (_objects.TryRemove(id, handle))
-                    GCHandlePool.Release(handle);
+                    handle.Free();
             return buffer.ToArray();
         }
         finally {
@@ -174,7 +164,7 @@ public sealed class RpcSharedObjectTracker : RpcObjectTracker, IEnumerable<IRpcS
 {
     private long _lastId;
     private long _lastKeepAliveAt; // CpuTimestamp
-    private readonly ConcurrentDictionary<long, IRpcSharedObject> _objects = new();
+    private readonly ConcurrentDictionary<long, IRpcSharedObject> _objects = new(HardwareInfo.ProcessorCountPo2, 17);
 
     public override int Count => _objects.Count;
 
@@ -208,7 +198,7 @@ public sealed class RpcSharedObjectTracker : RpcObjectTracker, IEnumerable<IRpcS
 
     public async Task Maintain(RpcHandshake handshake, CancellationToken cancellationToken)
     {
-        _lastKeepAliveAt = CpuTimestamp.Now.Value;
+        InterlockedExt.ExchangeIfGreater(ref _lastKeepAliveAt, CpuTimestamp.Now.Value);
         try {
             var hub = Peer.Hub;
             var clock = hub.Clock;
@@ -231,10 +221,9 @@ public sealed class RpcSharedObjectTracker : RpcObjectTracker, IEnumerable<IRpcS
         // ReSharper disable once FunctionNeverReturns
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public Task KeepAlive(long[] localIds)
     {
-        Interlocked.Exchange(ref _lastKeepAliveAt, CpuTimestamp.Now.Value);
+        InterlockedExt.ExchangeIfGreater(ref _lastKeepAliveAt, CpuTimestamp.Now.Value);
         var buffer = MemoryBuffer<long>.Lease(false);
         try {
             foreach (var id in localIds) {

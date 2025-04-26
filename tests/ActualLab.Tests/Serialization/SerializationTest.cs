@@ -1,6 +1,7 @@
 using ActualLab.Collections.Internal;
 using ActualLab.IO;
 using ActualLab.Reflection;
+using ActualLab.Rpc;
 using ActualLab.Rpc.Infrastructure;
 using TextOrBytes = ActualLab.Serialization.TextOrBytes;
 
@@ -66,17 +67,7 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
     {
         default(Result<int>).AssertPassesThroughAllSerializers(Out);
         Result.New(1).AssertPassesThroughAllSerializers(Out);
-        var r = Result.Error<int>(new InvalidOperationException()).PassThroughAllSerializers();
-        r.Error.Should().BeOfType<InvalidOperationException>();
-    }
-
-    [Fact]
-    public void ResultBoxSerialization()
-    {
-        default(ResultBox<int>).AssertPassesThroughAllSerializers(Out);
-        var r = new ResultBox<int>(1).PassThroughAllSerializers(Out);
-        r.Value.Should().Be(1);
-        r = new ResultBox<int>(0, new InvalidOperationException()).PassThroughAllSerializers();
+        var r = Result.NewError<int>(new InvalidOperationException()).PassThroughAllSerializers();
         r.Error.Should().BeOfType<InvalidOperationException>();
     }
 
@@ -145,8 +136,25 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
         static void AssertEqual(RpcHandshake value, OldRpcHandshake expected) {
             value.RemotePeerId.Should().Be(expected.RemotePeerId);
             value.RemoteHubId.Should().Be(expected.RemoteHubId);
-            value.RemoteApiVersionSet!.Versions.Should().Be(expected.RemoteApiVersionSet!.Versions);
+            value.RemoteApiVersionSet!.Value.Should().Be(expected.RemoteApiVersionSet!.Value);
         }
+    }
+
+    [Fact]
+    public void RpcNoWaitSerialization()
+    {
+        var x = default(RpcNoWait);
+        var o = default(OldRpcNoWait);
+
+        Out.WriteLine("New:");
+        x.PassThroughAllSerializers(Out);
+        Out.WriteLine("Old:");
+        o.PassThroughAllSerializers(Out);
+
+        Out.WriteLine("Old to new:");
+        o.AssertPassesThroughAllSerializers<OldRpcNoWait, RpcNoWait>((_, _) => {}, Out);
+        Out.WriteLine("New to old:");
+        x.AssertPassesThroughAllSerializers<RpcNoWait, OldRpcNoWait>((_, _) => {}, Out);
     }
 
     [Fact]
@@ -163,30 +171,30 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
     }
 
     [Fact]
-    public void RpcMessageSerialization()
+    public void RpcMessageV1Serialization()
     {
-        Test(new RpcMessage(0, 3, "s", "m",
+        Test(new RpcMessageV1(0, 3, "s", "m",
             new TextOrBytes([1, 2, 3]),
             null));
 
-        Test(new RpcMessage(1, 3, "s", "m",
+        Test(new RpcMessageV1(1, 3, "s", "m",
             new TextOrBytes([1, 2, 3]),
             []));
 
-        Test(new RpcMessage(2, 3, "s", "m",
+        Test(new RpcMessageV1(2, 3, "s", "m",
             new TextOrBytes([1, 2, 3]),
             [
                 new("v", "@OVhtp0TRc")
             ]));
 
-        Test(new RpcMessage(0, 3, "s", "m",
+        Test(new RpcMessageV1(0, 3, "s", "m",
             new TextOrBytes([1, 2, 3]),
             [
                 new("a", "b"),
                 new("v", "@OVhtp0TRc")
             ]));
 
-        void Test(RpcMessage m) {
+        void Test(RpcMessageV1 m) {
             var ms = m.PassThroughAllSerializers();
             ms.RelatedId.Should().Be(m.RelatedId);
             ms.Service.Should().Be(m.Service);
@@ -219,17 +227,33 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
     }
 
     [Fact]
-    public void Base64DataSerialization()
+    public void ByteStringSerialization()
     {
-        Test(default);
-        Test(new Base64Encoded(null!));
-        Test(new Base64Encoded([]));
-        Test(new Base64Encoded([1]));
-        Test(new Base64Encoded([1, 2]));
+        var e0 = Test(default);
+        var e1 = Test(ByteString.Empty);
+        var e2 = Test(new ByteString(null!));
+        var e3 = Test(new ByteString([]));
+        e3.Should().Be(e0).And.Be(e1).And.Be(e2);
+        e3.GetHashCode().Should().Be(e0.GetHashCode()).And.Be(e1.GetHashCode()).And.Be(e2.GetHashCode());
 
-        void Test(Base64Encoded src) {
+        var s1 = Test(new ByteString([1]));
+        s1.Should().NotBe(e0);
+        s1.GetHashCode().Should().NotBe(e0.GetHashCode());
+
+        var s2 = Test(new ByteString([1, 2]));
+        s2.Should().NotBe(e0);
+        s2.GetHashCode().Should().NotBe(e0.GetHashCode());
+
+        var s3 = Test(new ByteString(Enumerable.Range(0, 500).Select(i => (byte)i).ToArray()));
+        s3.Should().NotBe(e0);
+        s3.GetHashCode().Should().NotBe(e0.GetHashCode());
+
+        ByteString Test(ByteString src) {
             var dst = src.PassThroughAllSerializers(Out);
-            src.Data.SequenceEqual(dst.Data).Should().BeTrue();
+            src.GetHashCode().Equals(dst.GetHashCode()).Should().BeTrue();
+            src.Equals(dst).Should().BeTrue();
+            src.Span.SequenceEqual(dst.Span).Should().BeTrue();
+            return src;
         }
     }
 
@@ -244,7 +268,7 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
         Test(new TextOrBytes("2"));
 
         Test(TextOrBytes.EmptyBytes);
-        Test(new TextOrBytes(Array.Empty<byte>()));
+        Test(new TextOrBytes(ByteString.EmptyBytes));
         Test(new TextOrBytes([1]));
         Test(new TextOrBytes([1, 2]));
 
@@ -298,7 +322,9 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
     [Fact]
     public void ImmutableOptionSetSerialization()
     {
-        default(ImmutableOptionSet).AssertPassesThroughAllSerializers(Out);
+        default(ImmutableOptionSet).AssertPassesThroughAllSerializers(
+            x => x.Items.IsEmpty.Should().BeTrue(),
+            Out);
         var s = new ImmutableOptionSet();
         s = s.Set(3);
         s = s.Set("X");
@@ -346,10 +372,10 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
     {
         default(PropertyBag).AssertPassesThroughAllSerializers();
         var s = new PropertyBag();
-        s.Set(default(Unit));
-        s.Set(3);
-        s.Set((int?)4);
-        s.Set("X");
+        s.KeylessSet(default(Unit));
+        s.KeylessSet(3);
+        s.KeylessSet((int?)4);
+        s.KeylessSet("X");
         Out.WriteLine(s.ToString());
         var s1 = s.PassThroughSystemJsonSerializer(Out);
         Out.WriteLine(s1.ToString());
@@ -361,10 +387,10 @@ public class SerializationTest(ITestOutputHelper @out) : TestBase(@out)
     {
         default(MutablePropertyBag).AssertPassesThroughAllSerializers();
         var s = new MutablePropertyBag();
-        s.Set(default(Unit));
-        s.Set(3);
-        s.Set((int?)4);
-        s.Set("X");
+        s.KeylessSet(default(Unit));
+        s.KeylessSet(3);
+        s.KeylessSet((int?)4);
+        s.KeylessSet("X");
         Out.WriteLine(s.ToString());
         var s1 = s.PassThroughAllSerializers(Out);
         Out.WriteLine(s.ToString());

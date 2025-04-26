@@ -2,29 +2,31 @@ using System.Runtime.Serialization;
 using System.Transactions;
 using ActualLab.CommandR.Operations;
 using MemoryPack;
+using MessagePack;
 using Newtonsoft.Json;
 using Pastel;
 
 namespace Samples.HelloCart;
 
-[DataContract, MemoryPackable]
-[method: JsonConstructor, MemoryPackConstructor]
+[DataContract, MemoryPackable, MessagePackObject(true)]
+[method: JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 public partial record Product(
     [property: DataMember] string Id,
     [property: DataMember] decimal Price
 ) : IHasId<string>;
 
-[DataContract, MemoryPackable]
-[method: JsonConstructor, MemoryPackConstructor]
+[DataContract, MemoryPackable, MessagePackObject(true)]
+[method: JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 public partial record Cart(
     [property: DataMember] string Id
 ) : IHasId<string>
 {
-    [DataMember] public ImmutableDictionary<string, decimal> Items { get; init; } = ImmutableDictionary<string, decimal>.Empty;
+    [DataMember]
+    public ImmutableDictionary<string, decimal> Items { get; init; } = ImmutableDictionary<string, decimal>.Empty;
 }
 
-[DataContract, MemoryPackable]
-[method: JsonConstructor, MemoryPackConstructor]
+[DataContract, MemoryPackable, MessagePackObject(true)]
+[method: JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 public partial record EditCommand<TItem>(
     [property: DataMember] string Id,
     [property: DataMember] TItem? Item
@@ -34,10 +36,10 @@ public partial record EditCommand<TItem>(
     public EditCommand(TItem value) : this(value.Id, value) { }
 }
 
-[DataContract, MemoryPackable]
-[method: JsonConstructor, MemoryPackConstructor]
+[DataContract, MemoryPackable, MessagePackObject(true)]
+[method: JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 public partial record LogMessageCommand(
-    [property: DataMember] Symbol Uuid,
+    [property: DataMember] string Uuid,
     [property: DataMember] string Message,
     [property: DataMember] Moment DelayUntil = default
 ) : ILocalCommand<Unit>, IHasUuid, IHasDelayUntil
@@ -61,7 +63,7 @@ public partial record LogMessageCommand(
         var hasDelayUntil = DelayUntil != default;
         var color = hasDelayUntil ? ConsoleColor.Green : ConsoleColor.Blue;
         Console.WriteLine($"[{Uuid}] {Message}".Pastel(color));
-        if (AppSettings.EnableRandomLogMessageCommandFailures && char.IsDigit(Uuid.Value[^1])) {
+        if (AppSettings.EnableRandomLogMessageCommandFailures && char.IsDigit(Uuid[^1])) {
             await Task.Delay(300, CancellationToken.None).ConfigureAwait(false);
             throw new TransactionException("Can't run this command!");
         }
@@ -71,19 +73,19 @@ public partial record LogMessageCommand(
 public interface IProductService: IComputeService
 {
     [ComputeMethod]
-    Task<Product?> Get(string id, CancellationToken cancellationToken = default);
+    public Task<Product?> Get(string id, CancellationToken cancellationToken = default);
 
     [CommandHandler]
-    Task Edit(EditCommand<Product> command, CancellationToken cancellationToken = default);
+    public Task Edit(EditCommand<Product> command, CancellationToken cancellationToken = default);
 }
 
 public interface ICartService: IComputeService
 {
     [ComputeMethod]
-    Task<Cart?> Get(string id, CancellationToken cancellationToken = default);
+    public Task<Cart?> Get(string id, CancellationToken cancellationToken = default);
     [ComputeMethod]
-    Task<decimal> GetTotal(string id, CancellationToken cancellationToken = default);
+    public Task<decimal> GetTotal(string id, CancellationToken cancellationToken = default);
 
     [CommandHandler]
-    Task Edit(EditCommand<Cart> command, CancellationToken cancellationToken = default);
+    public Task Edit(EditCommand<Cart> command, CancellationToken cancellationToken = default);
 }

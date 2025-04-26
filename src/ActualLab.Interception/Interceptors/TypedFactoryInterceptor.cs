@@ -2,8 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ActualLab.Interception.Interceptors;
 
-#pragma warning disable IL2072
-
 public class TypedFactoryInterceptor : Interceptor
 {
     public new record Options : Interceptor.Options
@@ -12,21 +10,24 @@ public class TypedFactoryInterceptor : Interceptor
     }
 
     // ReSharper disable once ConvertToPrimaryConstructor
-    public TypedFactoryInterceptor(Options settings, IServiceProvider services) : base(settings, services)
+    public TypedFactoryInterceptor(Options settings, IServiceProvider services)
+        : base(settings, services)
     {
         MustInterceptAsyncCalls = false;
         MustInterceptSyncCalls = true;
     }
 
-    protected override MethodDef? CreateMethodDef(MethodInfo method, Type proxyType)
+    protected override MethodDef? CreateMethodDef(MethodInfo method,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type proxyType)
     {
         var methodDef = base.CreateMethodDef(method, proxyType);
-        if (methodDef?.UnwrappedReturnType == typeof(void))
+        if (methodDef?.ReturnType == typeof(void))
             methodDef = null;
         return methodDef;
     }
 
-    protected internal override Func<Invocation, object?>? CreateHandler<
+    [UnconditionalSuppressMessage("Trimming", "IL2077", Justification = "We assume all necessary methods are preserved")]
+    protected internal override Func<Invocation, object?>? CreateTypedHandler<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TUnwrapped>(
         Invocation initialInvocation, MethodDef methodDef)
     {

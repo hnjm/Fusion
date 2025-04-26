@@ -1,5 +1,6 @@
-using Cysharp.Text;
-using Microsoft.Toolkit.HighPerformance;
+using System.Diagnostics.CodeAnalysis;
+using CommunityToolkit.HighPerformance;
+using MessagePack;
 
 namespace ActualLab.Serialization;
 
@@ -10,32 +11,31 @@ public enum DataFormat
 }
 
 [StructLayout(LayoutKind.Auto)]
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
-[method: MemoryPackConstructor]
+[method: MemoryPackConstructor, SerializationConstructor]
 public readonly partial record struct TextOrBytes(
-    [property: DataMember(Order = 0), MemoryPackOrder(0)]
+    [property: DataMember(Order = 0), MemoryPackOrder(0), Key(0)]
     DataFormat Format,
-    [property: JsonIgnore, Newtonsoft.Json.JsonIgnore, DataMember(Order = 1), MemoryPackOrder(1)]
+    [property: JsonIgnore, Newtonsoft.Json.JsonIgnore, DataMember(Order = 1), MemoryPackOrder(1), Key(1)]
     ReadOnlyMemory<byte> Data
 ) {
     public static readonly TextOrBytes EmptyBytes = new(DataFormat.Bytes, default!);
     public static readonly TextOrBytes EmptyText = new(DataFormat.Text, default!);
 
-    private readonly byte[]? _data; // This field is used solely to avoid .ToArray() calls in Bytes property
-
     // Computed properties
-    [MemoryPackIgnore]
-    public byte[] Bytes => _data ?? GetBytes();
+    [MemoryPackIgnore, IgnoreMember]
+    [field: AllowNull, MaybeNull]
+    public byte[] Bytes => field ?? GetBytes();
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public bool IsEmpty => Data.Length == 0;
 
     public TextOrBytes(string text)
         : this(text.AsMemory()) { }
     public TextOrBytes(byte[] bytes)
         : this(DataFormat.Bytes, bytes.AsMemory())
-        => _data = bytes;
+        => Bytes = bytes;
     public TextOrBytes(ReadOnlyMemory<char> text)
         : this(DataFormat.Text, text.Cast<char, byte>()) { }
     public TextOrBytes(ReadOnlyMemory<byte> bytes)
@@ -59,8 +59,8 @@ public readonly partial record struct TextOrBytes(
             : BitConverter.ToString(Data.Span[..Math.Min(Data.Length, maxLength)].ToArray());
 #endif
         return isText
-            ? ZString.Concat("[ ", text.Length, " char(s): `", sData, text.Length <= maxLength ? "` ]" : "`... ]")
-            : ZString.Concat("[ ", Data.Length, " byte(s): ", sData, Data.Length <= maxLength ? " ]" : "... ]");
+            ? $"[ {text.Length} char(s): `{sData}{(text.Length <= maxLength ? "`" : "`...")} ]"
+            : $"[ {Data.Length} byte(s): {sData}{(Data.Length <= maxLength ? "" : "...")} ]";
     }
 
     public static implicit operator TextOrBytes(ReadOnlyMemory<byte> bytes) => new(bytes);
@@ -96,7 +96,7 @@ public readonly partial record struct TextOrBytes(
     // Structural equality
 
     public int GetDataHashCode()
-        => Data.Span.GetDjb2HashCode();
+        => Data.Span.GetXxHash3();
 
     public bool DataEquals(TextOrBytes other)
         => Data.Span.SequenceEqual(other.Data.Span);

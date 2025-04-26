@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="latest" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
   <PropertyGroup>
     <!-- Compiler & toolchain -->
-    <BaseIntermediateOutputPath>$(SolutionDir)artifacts\obj\$(MSBuildProjectName)</BaseIntermediateOutputPath>
-    <OutputPath>$(SolutionDir)artifacts\bin\$(MSBuildProjectName)</OutputPath>
-    <PublishConfiguration>Release</PublishConfiguration>
     <IsPackable>true</IsPackable>
+    <IsTrimmable>true</IsTrimmable>
     <!-- PolySharp -->
     <PolySharpIncludeRuntimeSupportedAttributes>true</PolySharpIncludeRuntimeSupportedAttributes>
     <!-- Signing -->
@@ -60,17 +59,17 @@
   -->
 
   <!-- Polyfills -->
-  <ItemGroup Condition="!($(TargetFramework.StartsWith('net8')))">
-    <PackageReference Include="PolySharp" />
+  <ItemGroup Condition="!($(TargetFramework.StartsWith('net9')) or $(TargetFramework.StartsWith('net8')))">
+    <PackageReference Include="PolySharp" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Analyzers -->
   <ItemGroup>
-    <PackageReference Include="Nerdbank.GitVersioning" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" />
-    <PackageReference Include="Roslynator.Analyzers" />
-    <PackageReference Include="Meziantou.Analyzer" />
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" />
+    <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
+    <PackageReference Include="Roslynator.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Global usings -->

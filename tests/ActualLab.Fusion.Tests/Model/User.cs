@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using MessagePack;
 using Microsoft.EntityFrameworkCore;
 
 namespace ActualLab.Fusion.Tests.Model;
@@ -7,6 +8,11 @@ namespace ActualLab.Fusion.Tests.Model;
 [Table("TestUsers")]
 [Index(nameof(Name))]
 [DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+#if NET8_0_OR_GREATER
+[MessagePackObject(true, SuppressSourceGeneration = true)]
+#else
+[MessagePackObject(true)]
+#endif
 public partial record User : LongKeyedEntity
 {
     [Required, MaxLength(120)]

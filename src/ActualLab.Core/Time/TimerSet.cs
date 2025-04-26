@@ -14,11 +14,15 @@ public record TimerSetOptions
 public sealed class TimerSet<TTimer> : WorkerBase
     where TTimer : notnull
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
+    private readonly object _lock = new();
+#endif
     private readonly Action<TTimer>? _fireHandler;
     private readonly RadixHeapSet<TTimer> _timers = new(45);
     private readonly Moment _start;
-    private readonly object _lock = new();
-    private int _minPriority = 0;
+    private int _minPriority;
 
     public MomentClock Clock { get; }
     public TickSource TickSource { get; }
@@ -49,7 +53,7 @@ public sealed class TimerSet<TTimer> : WorkerBase
     public void AddOrUpdate(TTimer timer, long priority)
     {
         lock (_lock)
-            _timers.AddOrUpdate(FixPriority(priority), timer);
+            _timers.AddOrUpdate(FixPriorityFromLock(priority), timer);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -58,7 +62,7 @@ public sealed class TimerSet<TTimer> : WorkerBase
     public bool AddOrUpdateToEarlier(TTimer timer, long priority)
     {
         lock (_lock)
-            return _timers.AddOrUpdateToLower(FixPriority(priority), timer);
+            return _timers.AddOrUpdateToLower(FixPriorityFromLock(priority), timer);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -67,7 +71,7 @@ public sealed class TimerSet<TTimer> : WorkerBase
     public bool AddOrUpdateToLater(TTimer timer, long priority)
     {
         lock (_lock)
-            return _timers.AddOrUpdateToHigher(FixPriority(priority), timer);
+            return _timers.AddOrUpdateToHigher(FixPriorityFromLock(priority), timer);
     }
 
     public bool Remove(TTimer timer)
@@ -109,6 +113,6 @@ public sealed class TimerSet<TTimer> : WorkerBase
     // Private methods
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private long FixPriority(long priority)
+    private long FixPriorityFromLock(long priority)
         => Math.Max(_minPriority, priority);
 }

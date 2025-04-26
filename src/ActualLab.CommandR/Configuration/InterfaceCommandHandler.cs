@@ -4,7 +4,7 @@ namespace ActualLab.CommandR.Configuration;
 
 public interface IInterfaceCommandHandler : ICommandHandler
 {
-    Type ServiceType { get; }
+    public Type ServiceType { get; }
 }
 
 public sealed record InterfaceCommandHandler<
@@ -25,7 +25,7 @@ public sealed record InterfaceCommandHandler<
         ICommand command, CommandContext context,
         CancellationToken cancellationToken)
     {
-        var handler = (ICommandHandler<TCommand>) GetHandlerService(command, context);
+        var handler = (ICommandHandler<TCommand>)GetHandlerService(command, context);
         return handler.OnCommand((TCommand)command, context, cancellationToken);
     }
 
@@ -36,6 +36,10 @@ public sealed record InterfaceCommandHandler<
     public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume all command handling code is preserved")]
 public static class InterfaceCommandHandler
 {
     public static InterfaceCommandHandler<TCommand> New<

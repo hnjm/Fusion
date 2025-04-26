@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks Condition="$(UseMultitargeting)">net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;net48;net471</TargetFrameworks>
-    <TargetFramework Condition="!$(UseMultitargeting)">net8.0</TargetFramework>
+    <TargetFrameworks Condition="$(UseMultitargeting)">net9.0;net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;net48;net471</TargetFrameworks>
     <IsTestProject>false</IsTestProject>
     <PackageTags>actual_chat actual_lab testing</PackageTags>
     <Description>ActualLab.Testing is a collection of <!--
@@ -15,7 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="!$(TargetFramework.StartsWith('netstandard2.0'))">
-    <PackageReference Include="MemoryPack.Generator" />
+    <PackageReference Include="MemoryPack.Generator" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="!$(TargetFramework.StartsWith('net4'))">
@@ -26,8 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluentAssertions" />
-    <PackageReference Include="MessagePack" />
+    <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="System.Net.Http" />
     <PackageReference Include="xunit" />

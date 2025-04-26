@@ -6,6 +6,8 @@ using ActualLab.OS;
 
 namespace ActualLab.Fusion.Tests;
 
+#pragma warning disable CS0162 // Unreachable code detected
+
 public class PerformanceTest_Sqlite : PerformanceTestBase
 {
     public PerformanceTest_Sqlite(ITestOutputHelper @out) : base(@out)
@@ -83,7 +85,6 @@ public abstract class PerformanceTestBase : FusionTestBase
         var withSerialization = (Action<User>?)(u => JsonSerializer.Serialize(u)); // STJ serializer
         var enableSerialization = false;
 
-        Out.WriteLine($".NET: {RuntimeInfo.DotNet.VersionString ?? RuntimeInformation.FrameworkDescription}");
         Out.WriteLine($"Database: {DbType}" + (UseEntityResolver ? " (with DbEntityResolver)" : ""));
         Out.WriteLine("With ActualLab.Fusion:");
         if (enableSerialization)
@@ -134,13 +135,13 @@ public abstract class PerformanceTestBase : FusionTestBase
             var mutatorTask = enableMutations
                 ? Task.Run(() => Mutator("W", cancellationToken), CancellationToken.None)
                 : Task.CompletedTask;
-            var whenReadySource = TaskCompletionSourceExt.New<Unit>();
+            var whenReadySource = AsyncTaskMethodBuilderExt.New();
             var tasks = Enumerable
                 .Range(0, threadCount)
                 .Select(i => Task.Run(() => Reader($"R{i}", iterationCount, whenReadySource.Task), CancellationToken.None))
                 .ToArray();
             var startedAt = CpuTimestamp.Now;
-            whenReadySource.SetResult(default);
+            whenReadySource.SetResult();
             var results = await Task.WhenAll(tasks);
             var elapsed = startedAt.Elapsed;
 

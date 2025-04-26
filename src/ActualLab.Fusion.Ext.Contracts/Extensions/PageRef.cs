@@ -1,4 +1,5 @@
 using System.Globalization;
+using MessagePack;
 
 namespace ActualLab.Fusion.Extensions;
 
@@ -14,12 +15,10 @@ public abstract record PageRef : IHasToStringProducingJson
     public static PageRef<TKey> Parse<TKey>(string value)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count)
             ? new PageRef<TKey>(count)
-#pragma warning disable IL2026
             : SystemJsonSerializer.Default.Read<PageRef<TKey>>(value);
-#pragma warning restore IL2026
 }
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 public partial record PageRef<TKey>(
     [property: DataMember(Order = 0), MemoryPackOrder(0)] int Count,
     [property: DataMember(Order = 1), MemoryPackOrder(1)] Option<TKey> After = default
@@ -28,9 +27,7 @@ public partial record PageRef<TKey>(
     public override string ToString()
         => After.IsNone
             ? Count.ToString(CultureInfo.InvariantCulture)
-#pragma warning disable IL2026
             : SystemJsonSerializer.Default.Write(this, GetType());
-#pragma warning restore IL2026
 
     public static implicit operator PageRef<TKey>(int count)
         => new(count);

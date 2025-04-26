@@ -1,51 +1,51 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.OS;
 
 namespace ActualLab.Rpc;
 
 public static class RpcDefaults
 {
-    private static readonly object Lock = new();
-    private static VersionSet? _apiPeerVersions;
-    private static VersionSet? _backendPeerVersions;
-    private static RpcMode _mode;
+#if NET9_0_OR_GREATER
+    private static readonly Lock StaticLock = new();
+#else
+    private static readonly object StaticLock = new();
+#endif
 
     public static RpcMode Mode {
-        get => _mode;
+        get;
         set {
             if (value is not (RpcMode.Client or RpcMode.Server))
                 throw new ArgumentOutOfRangeException(nameof(value), value, null);
-            lock (Lock)
-                _mode = value;
-        }
-    }
 
-    public static Symbol ApiScope { get; set; } = "Api";
-    public static Symbol BackendScope { get; set; } = "Backend";
+            lock (StaticLock)
+                field = value;
+        }
+    } = OSInfo.IsAnyClient ? RpcMode.Client : RpcMode.Server;
+
+    public static string ApiScope { get; set; } = "Api";
+    public static string BackendScope { get; set; } = "Backend";
     public static Version ApiVersion { get; set; } = new(1, 0);
     public static Version BackendVersion { get; set; } = new(1, 0);
 
+    [field: AllowNull, MaybeNull]
     public static VersionSet ApiPeerVersions {
         get {
-            if (_apiPeerVersions?[ApiScope] != ApiVersion)
-                lock (Lock)
-                    if (_apiPeerVersions?[ApiScope] != ApiVersion)
-                        _apiPeerVersions = new(ApiScope, ApiVersion);
-            return _apiPeerVersions;
+            if (field?[ApiScope] != ApiVersion)
+                lock (StaticLock)
+                    if (field?[ApiScope] != ApiVersion)
+                        field = new(ApiScope, ApiVersion);
+            return field;
         }
     }
 
+    [field: AllowNull, MaybeNull]
     public static VersionSet BackendPeerVersions {
         get {
-            if (_backendPeerVersions?[BackendScope] != BackendVersion)
-                lock (Lock)
-                    if (_backendPeerVersions?[BackendScope] != BackendVersion)
-                        _backendPeerVersions = new(BackendScope, BackendVersion);
-            return _backendPeerVersions;
+            if (field?[BackendScope] != BackendVersion)
+                lock (StaticLock)
+                    if (field?[BackendScope] != BackendVersion)
+                        field = new(BackendScope, BackendVersion);
+            return field;
         }
     }
-
-    // Type constructor
-
-    static RpcDefaults()
-        => Mode = OSInfo.IsAnyClient ? RpcMode.Client : RpcMode.Server;
 }

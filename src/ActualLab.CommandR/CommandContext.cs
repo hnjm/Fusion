@@ -1,12 +1,14 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using ActualLab.CommandR.Internal;
 using ActualLab.CommandR.Operations;
+using ActualLab.OS;
 
 namespace ActualLab.CommandR;
 
 public abstract class CommandContext(ICommander commander) : IHasServices, IAsyncDisposable
 {
-    private static readonly ConcurrentDictionary<Type, Type> CommandContextTypeCache = new();
+    private static readonly ConcurrentDictionary<Type, Type> CommandContextTypeCache = new(HardwareInfo.ProcessorCountPo2, 131);
 
     protected static readonly AsyncLocal<CommandContext?> CurrentLocal = new();
 
@@ -22,7 +24,7 @@ public abstract class CommandContext(ICommander commander) : IHasServices, IAsyn
 #pragma warning disable CA2119
     public abstract ICommand UntypedCommand { get; }
     public abstract Task UntypedResultTask { get; }
-    public abstract Result<object> UntypedResult { get; }
+    public abstract Result UntypedResult { get; }
     public abstract bool IsCompleted { get; }
 #pragma warning restore CA2119
 
@@ -42,6 +44,8 @@ public abstract class CommandContext(ICommander commander) : IHasServices, IAsyn
 
     // Static methods
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume all command handling code is preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume all command handling code is preserved")]
     public static CommandContext New(
         ICommander commander, ICommand command, bool isOutermost)
     {
@@ -52,9 +56,7 @@ public abstract class CommandContext(ICommander commander) : IHasServices, IAsyn
         var tContext = CommandContextTypeCache.GetOrAdd(
             tCommandResult,
             static t => typeof(CommandContext<>).MakeGenericType(t));
-#pragma warning disable IL2072
         return (CommandContext)tContext.CreateInstance(commander, command, isOutermost);
-#pragma warning restore IL2072
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -121,18 +123,18 @@ public abstract class CommandContext(ICommander commander) : IHasServices, IAsyn
 
 public sealed class CommandContext<TResult> : CommandContext
 {
-    private Result<TResult> _result;
     public ICommand<TResult> Command { get; }
     public Task<TResult> ResultTask => ResultSource.Task;
     public readonly TaskCompletionSource<TResult> ResultSource; // Set at the very end of the pipeline (via Complete)
 
     // Result may change while the pipeline runs
     public Result<TResult> Result {
-        get => _result;
+        get;
         set {
             if (IsCompleted)
                 return;
-            _result = value;
+
+            field = value;
         }
     }
 
@@ -140,7 +142,7 @@ public sealed class CommandContext<TResult> : CommandContext
 
     public override ICommand UntypedCommand => Command;
     public override Task UntypedResultTask => ResultTask;
-    public override Result<object> UntypedResult => Result.Cast<object>();
+    public override Result UntypedResult => Result.ToUntypedResult();
 
     public CommandContext(ICommander commander, ICommand command, bool isOutermost)
         : base(commander)

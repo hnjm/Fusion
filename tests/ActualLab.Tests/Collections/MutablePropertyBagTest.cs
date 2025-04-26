@@ -1,5 +1,3 @@
-using ActualLab.Fusion.EntityFramework;
-
 namespace ActualLab.Tests.Collections;
 
 public class MutablePropertyBagTest(ITestOutputHelper @out) : TestBase(@out)
@@ -11,38 +9,38 @@ public class MutablePropertyBagTest(ITestOutputHelper @out) : TestBase(@out)
         o = o.PassThroughAllSerializers();
         o.Count.Should().Be(0);
 
-        o.Set("A");
+        o.KeylessSet("A");
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.Get<string>().Should().Be("A");
-            x.GetOrDefault("").Should().Be("A");
+            x.KeylessGet<string>().Should().Be("A");
+            x.KeylessGet("").Should().Be("A");
             x.Count.Should().Be(1);
         });
 
-        o.Set("B");
+        o.KeylessSet("B");
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.Get<string>().Should().Be("B");
-            x.GetOrDefault("").Should().Be("B");
+            x.KeylessGet<string>().Should().Be("B");
+            x.KeylessGet("").Should().Be("B");
             x.Count.Should().Be(1);
         });
 
-        var s = new DbShard("S");
-        o.Set(s);
+        var s = new Symbol("S");
+        o.KeylessSet(s);
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.Get<string>().Should().Be("B");
-            x.GetOrDefault("").Should().Be("B");
-            x.GetOrDefault<DbShard>().Should().Be(s);
+            x.KeylessGet<string>().Should().Be("B");
+            x.KeylessGet("").Should().Be("B");
+            x.KeylessGet<Symbol>().Should().Be(s);
             x.Count.Should().Be(2);
         });
 
-        o.Remove<string>();
-        o.Remove<DbShard>();
+        o.KeylessRemove<Symbol>();
+        o.KeylessRemove<string>();
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.Get<string>().Should().BeNull();
-            x.GetOrDefault("").Should().Be("");
+            x.KeylessGet<string>().Should().BeNull();
+            x.KeylessGet("").Should().Be("");
             x.Count.Should().Be(0);
         });
 
-        o.Set("C");
+        o.KeylessSet("C");
         o.Clear();
         o.Count.Should().Be(0);
     }
@@ -57,46 +55,46 @@ public class MutablePropertyBagTest(ITestOutputHelper @out) : TestBase(@out)
         // We use Int64 type here b/c JSON serializer
         // deserializes integers to this type.
 
-        o.Set(0L);
-        o.Set(1L);
+        o.KeylessSet(0L);
+        o.KeylessSet(1L);
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.GetOrDefault<long>().Should().Be(1L);
-            x.GetOrDefault(-1L).Should().Be(1L);
+            x.KeylessGet<long>().Should().Be(1L);
+            x.KeylessGet(-1L).Should().Be(1L);
             x.Count.Should().Be(1);
         });
 
-        o.Set(2L);
+        o.KeylessSet(2L);
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.GetOrDefault<long>().Should().Be(2L);
-            x.GetOrDefault(-1L).Should().Be(2L);
+            x.KeylessGet<long>().Should().Be(2L);
+            x.KeylessGet(-1L).Should().Be(2L);
             x.Count.Should().Be(1);
         });
 
-        o.Remove<long>();
+        o.KeylessRemove<long>();
         o = o.AssertPassesThroughAllSerializers(x => {
-            x.GetOrDefault<long>().Should().Be(0L);
-            x.GetOrDefault(-1L).Should().Be(-1L);
+            x.KeylessGet<long>().Should().Be(0L);
+            x.KeylessGet(-1L).Should().Be(-1L);
             x.Count.Should().Be(0);
         });
 
-        o.Remove<long>();
+        o.KeylessRemove<long>();
         o.Count.Should().Be(0);
 
-        o.GetOrDefault<long>().Should().Be(0L);
-        o.GetOrDefault<long?>().Should().Be(null);
-        o.Set(1L);
-        o.Set((long?)2L);
+        o.KeylessGet<long>().Should().Be(0L);
+        o.KeylessGet<long?>().Should().Be(null);
+        o.KeylessSet(1L);
+        o.KeylessSet((long?)2L);
         o.Count.Should().Be(2);
-        o.GetOrDefault<long>().Should().Be(1L);
-        o.GetOrDefault<long?>().Should().Be(2L);
-        o.Set((long?)null);
+        o.KeylessGet<long>().Should().Be(1L);
+        o.KeylessGet<long?>().Should().Be(2L);
+        o.KeylessSet((long?)null);
         o.Count.Should().Be(1);
-        o.GetOrDefault<long>().Should().Be(1L);
-        o.GetOrDefault<long?>().Should().Be(null);
-        o.Remove<long>();
+        o.KeylessGet<long>().Should().Be(1L);
+        o.KeylessGet<long?>().Should().Be(null);
+        o.KeylessRemove<long>();
         o.Count.Should().Be(0);
 
-        o.Set(3L);
+        o.KeylessSet(3L);
         o.Count.Should().Be(1);
 
         o.Clear();
@@ -107,13 +105,13 @@ public class MutablePropertyBagTest(ITestOutputHelper @out) : TestBase(@out)
     public void SetManyTest()
     {
         var options = new MutablePropertyBag();
-        options.Set(1L);
-        options.Set("A");
+        options.KeylessSet(1L);
+        options.KeylessSet("A");
         var copy = new MutablePropertyBag();
         copy.SetMany(options.Snapshot);
 
         copy.Count.Should().Be(2);
-        copy.GetOrDefault<long>().Should().Be(1L);
-        copy.Get<string>().Should().Be("A");
+        copy.KeylessGet<long>().Should().Be(1L);
+        copy.KeylessGet<string>().Should().Be("A");
     }
 }

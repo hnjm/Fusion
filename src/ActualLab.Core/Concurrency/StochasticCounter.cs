@@ -14,8 +14,6 @@ public struct StochasticCounter
     public int Value {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _value;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        set => Interlocked.Exchange(ref _value, value);
     }
 
     public readonly int Mask;
@@ -31,23 +29,27 @@ public struct StochasticCounter
         Precision = Mask + 1;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int Reset(int value = 0)
+        => Interlocked.Exchange(ref _value, value);
+
     // Overloads w/o random
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryIncrement(int max)
-        => TryIncrement(ThreadRandom.Next(), max);
+        => TryIncrement(RandomShared.Next(), max);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryDecrement(int min)
-        => TryDecrement(ThreadRandom.Next(), min);
+        => TryDecrement(RandomShared.Next(), min);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? Increment()
-        => Increment(ThreadRandom.Next());
+        => Increment(RandomShared.Next());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? Decrement()
-        => Decrement(ThreadRandom.Next());
+        => Decrement(RandomShared.Next());
 
     // Overloads with random
 

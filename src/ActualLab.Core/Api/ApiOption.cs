@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using ActualLab.Api.Internal;
 using ActualLab.Conversion;
 using ActualLab.Internal;
+using MessagePack;
 
 namespace ActualLab.Api;
 
@@ -31,10 +33,15 @@ public static class ApiOption
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)] // Important!
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+#if NET8_0_OR_GREATER
+[MessagePackObject(true, SuppressSourceGeneration = true)]
+#else
+[MessagePackFormatter(typeof(ApiOptionMessagePackFormatter<>))]
+#endif
 [DebuggerDisplay("{" + nameof(DebugValue) + "}")]
-[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
 public readonly partial struct ApiOption<T>(bool hasValue, T valueOrDefault)
     : IOption, ICanBeNone<ApiOption<T>>, IEquatable<ApiOption<T>>, IComparable<ApiOption<T>>, IConvertibleTo<Option<T>>
@@ -57,13 +64,13 @@ public readonly partial struct ApiOption<T>(bool hasValue, T valueOrDefault)
     /// <summary>
     /// Retrieves option's value. Throws <see cref="InvalidOperationException"/> in case option doesn't have one.
     /// </summary>
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public T Value {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get { AssertHasValue(); return ValueOrDefault!; }
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public bool IsNone {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => !HasValue;
@@ -71,8 +78,9 @@ public readonly partial struct ApiOption<T>(bool hasValue, T valueOrDefault)
 
     /// <inheritdoc />
     // ReSharper disable once HeapView.BoxingAllocation
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     object? IOption.Value => Value;
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     private string DebugValue => ToString();
 
     /// <inheritdoc />
@@ -129,7 +137,7 @@ public readonly partial struct ApiOption<T>(bool hasValue, T valueOrDefault)
 
     public int CompareTo(ApiOption<T> other)
         => HasValue
-            ? other.HasValue ? Comparer<T>.Default.Compare(ValueOrDefault, other.ValueOrDefault) : 1
+            ? other.HasValue ? Comparer<T>.Default.Compare(ValueOrDefault!, other.ValueOrDefault!) : 1
             : other.HasValue ? -1 : 0;
 
     // Operators
@@ -139,7 +147,7 @@ public readonly partial struct ApiOption<T>(bool hasValue, T valueOrDefault)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator ApiOption<T>((bool HasValue, T Value) source) => new(source.HasValue, source.Value);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator ApiOption<T>(Option<T> source) => new(source.HasValue, source.ValueOrDefault);
+    public static implicit operator ApiOption<T>(Option<T> source) => new(source.HasValue, source.ValueOrDefault!);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator Option<T>(ApiOption<T> source) => new(source.HasValue, source.ValueOrDefault);
 

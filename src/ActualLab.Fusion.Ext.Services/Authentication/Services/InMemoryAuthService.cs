@@ -8,8 +8,8 @@ public partial class InMemoryAuthService(IServiceProvider services) : IAuth, IAu
 {
     private long _nextUserId;
 
-    protected ConcurrentDictionary<(DbShard Shard, Symbol UserId), User> Users { get; } = new();
-    protected ConcurrentDictionary<(DbShard Shard, Symbol SessionId), SessionInfo> SessionInfos { get; } = new();
+    protected ConcurrentDictionary<(string Shard, string UserId), User> Users { get; } = new();
+    protected ConcurrentDictionary<(string Shard, string SessionId), SessionInfo> SessionInfos { get; } = new();
     protected VersionGenerator<long> VersionGenerator { get; } = services.VersionGenerator<long>();
     protected IDbShardResolver<Unit> ShardResolver { get; } = services.DbShardResolver<Unit>();
     protected MomentClockSet Clocks { get; } = services.Clocks();
@@ -37,7 +37,7 @@ public partial class InMemoryAuthService(IServiceProvider services) : IAuth, IAu
             _ = GetAuthInfo(session, default);
             if (force)
                 _ = IsSignOutForced(session, default);
-            var invSessionInfo = context.Operation.Items.Get<SessionInfo>();
+            var invSessionInfo = context.Operation.Items.KeylessGet<SessionInfo>();
             if (invSessionInfo != null) {
                 _ = GetUser(shard, invSessionInfo.UserId, default);
                 _ = GetUserSessions(shard, invSessionInfo.UserId, default);
@@ -68,10 +68,10 @@ public partial class InMemoryAuthService(IServiceProvider services) : IAuth, IAu
             return;
 
         // Updating SessionInfo
-        context.Operation.Items.Set(sessionInfo);
+        context.Operation.Items.KeylessSet(sessionInfo);
         sessionInfo = sessionInfo with {
             AuthenticatedIdentity = "",
-            UserId = Symbol.Empty,
+            UserId = "",
             IsSignOutForced = force,
         };
         UpsertSessionInfo(shard, session.Id, sessionInfo, null);
@@ -85,7 +85,7 @@ public partial class InMemoryAuthService(IServiceProvider services) : IAuth, IAu
         var shard = ShardResolver.Resolve(command);
 
         if (Invalidation.IsActive) {
-            var invSessionInfo = context.Operation.Items.Get<SessionInfo>();
+            var invSessionInfo = context.Operation.Items.KeylessGet<SessionInfo>();
             if (invSessionInfo != null)
                 _ = GetUser(shard, invSessionInfo.UserId, default);
             return;
@@ -99,7 +99,7 @@ public partial class InMemoryAuthService(IServiceProvider services) : IAuth, IAu
             .Require()
             .ConfigureAwait(false);
 
-        context.Operation.Items.Set(sessionInfo);
+        context.Operation.Items.KeylessSet(sessionInfo);
         if (command.Name != null) {
             if (command.Name.Length < 3)
                 throw new ArgumentOutOfRangeException(nameof(command));

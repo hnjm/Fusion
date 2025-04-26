@@ -1,37 +1,42 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Fusion.Internal;
 
 namespace ActualLab.Fusion;
 
 public class StateFactory(IServiceProvider services) : IHasServices
 {
-    private static readonly object Lock = new();
-    private static StateFactory? _default;
+#if NET9_0_OR_GREATER
+    private static readonly Lock StaticLock = new();
+#else
+    private static readonly object StaticLock = new();
+#endif
 
+    [field: AllowNull, MaybeNull]
     public static StateFactory Default {
         get {
-            if (_default != null)
-                return _default;
-
-            lock (Lock) {
-                _default ??= new ServiceCollection().AddFusion().Services.BuildServiceProvider().StateFactory();
-                return _default;
-            }
+            if (field is { } value)
+                return value;
+            lock (StaticLock)
+                return field ??= new ServiceCollection().AddFusion().Services.BuildServiceProvider().StateFactory();
         }
-        set => _default = value;
+        set {
+            lock (StaticLock)
+                field = value;
+        }
     }
 
     public IServiceProvider Services { get; } = services;
 
-    public virtual MutableState<T> NewMutable<T>(MutableState<T>.Options settings)
-        => new(settings, Services);
+    public virtual MutableState<T> NewMutable<T>(MutableState<T>.Options options)
+        => new(options, Services);
 
     public virtual ComputedState<T> NewComputed<T>(
-        ComputedState<T>.Options settings,
+        ComputedState<T>.Options options,
         Func<CancellationToken, Task<T>> computer)
-        => new FuncComputedState<T>(settings, Services, computer);
+        => new FuncComputedState<T>(options, Services, computer);
 
     public virtual ComputedState<T> NewComputed<T>(
-        ComputedState<T>.Options settings,
+        ComputedState<T>.Options options,
         Func<ComputedState<T>, CancellationToken, Task<T>> computer)
-        => new FuncComputedStateEx<T>(settings, Services, computer);
+        => new FuncComputedStateEx<T>(options, Services, computer);
 }

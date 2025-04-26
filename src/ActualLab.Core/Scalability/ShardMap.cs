@@ -1,5 +1,5 @@
 using System.Text;
-using Microsoft.Toolkit.HighPerformance;
+using CommunityToolkit.HighPerformance;
 using StringBuilderExt = ActualLab.Text.StringBuilderExt;
 
 namespace ActualLab.Scalability;
@@ -91,7 +91,7 @@ public class ShardMap<TNode>
     private static IEnumerable<int> GetDefaultHashSequence(string source)
     {
         for (var i = 0;; i++)
-            yield return $"{source}-{i:x8}".GetDjb2HashCode();
+            yield return $"{source}-{i:x8}".GetXxHash3();
         // ReSharper disable once IteratorNeverReturns
     }
 }

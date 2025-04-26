@@ -1,25 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.Collections.Internal;
+using MessagePack;
 
 namespace ActualLab.Collections;
-
-public interface IMutablePropertyBag : IReadOnlyPropertyBag
-{
-    event Action? Changed;
-
-    bool Set<T>(T value);
-    bool Set<T>(Symbol key, T value);
-    bool Set(Symbol key, object? value);
-    void SetMany(PropertyBag items);
-    void SetMany(params PropertyBagItem[] items);
-    bool Remove<T>();
-    bool Remove(Symbol key);
-    void Clear();
-
-    bool Update(PropertyBag bag);
-    bool Update(Func<PropertyBag, PropertyBag> updater);
-    bool Update<TState>(TState state, Func<TState, PropertyBag, PropertyBag> updater);
-}
 
 #pragma warning disable CS0618 // Type or member is obsolete
 
@@ -27,18 +10,22 @@ public interface IMutablePropertyBag : IReadOnlyPropertyBag
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)]
 #endif
 [StructLayout(LayoutKind.Auto)]
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
-public sealed partial class MutablePropertyBag : IMutablePropertyBag
+public sealed partial class MutablePropertyBag
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
     private readonly object _lock = new();
+#endif
     private PropertyBag _snapshot;
 
     public event Action? Changed;
 
     // MessagePack requires this member to be public
     [Obsolete("This member exists solely to make serialization work. Don't use it!")]
-    [DataMember(Order = 0), MemoryPackOrder(0), MemoryPackInclude, JsonInclude, Newtonsoft.Json.JsonProperty]
+    [DataMember(Order = 0), MemoryPackOrder(0), Key(0), MemoryPackInclude, JsonInclude, Newtonsoft.Json.JsonProperty]
     public PropertyBagItem[]? RawItems {
         get => _snapshot.RawItems;
         init => _snapshot = new PropertyBag(value);
@@ -46,29 +33,35 @@ public sealed partial class MutablePropertyBag : IMutablePropertyBag
 
     // Computed properties
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public PropertyBag Snapshot {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _snapshot;
         set => Update(value, (bag, _) => bag);
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public int Count {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _snapshot.Count;
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public IReadOnlyList<PropertyBagItem> Items {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _snapshot.Items;
     }
 
-    public object? this[Symbol key] {
+    public object? this[string key] {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _snapshot[key];
         set => Update((key, value), static (s, bag) => bag.Set(s.key, s.value));
+    }
+
+    public object? this[Type key] {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _snapshot[key.ToIdentifierSymbol()];
+        set => Update((key, value), static (s, bag) => bag.Set(s.key.ToIdentifierSymbol(), s.value));
     }
 
     public MutablePropertyBag()
@@ -77,97 +70,26 @@ public sealed partial class MutablePropertyBag : IMutablePropertyBag
     public MutablePropertyBag(PropertyBag snapshot)
         => _snapshot = snapshot;
 
-    [MemoryPackConstructor, JsonConstructor, Newtonsoft.Json.JsonConstructor]
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public MutablePropertyBag(PropertyBagItem[]? rawItems)
         => _snapshot = new PropertyBag(rawItems);
 
     public override string ToString()
         => $"{nameof(MutablePropertyBag)}({PropertyBagHelper.GetToStringArgs(RawItems)})";
 
-    // Contains
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains<T>()
-        => _snapshot[typeof(T)] != null;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains(Symbol key)
-        => _snapshot[key] != null;
-
-    // TryGet
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryGet<T>([MaybeNullWhen(false)] out T value)
-        => _snapshot.TryGet(typeof(T), out value);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryGet<T>(Symbol key, [MaybeNullWhen(false)] out T value)
-        => _snapshot.TryGet(key, out value);
-
-    // Get
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T? Get<T>()
-        where T : class
-        => _snapshot.Get<T>(typeof(T));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T? Get<T>(Symbol key)
-        where T : class
-        => (T?)_snapshot[key];
-
-    // GetOrDefault
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetOrDefault<T>()
-        => _snapshot.GetOrDefault<T>(typeof(T));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetOrDefault<T>(Symbol key)
-        => _snapshot.GetOrDefault<T>(key);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetOrDefault<T>(T @default)
-        => _snapshot.GetOrDefault(typeof(T), @default);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public T GetOrDefault<T>(Symbol key, T @default)
-        => _snapshot.GetOrDefault(key, @default);
-
-    // Set
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Set<T>(T value)
-        => Set(typeof(T), (object?)value);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Set<T>(Symbol key, T value)
-        => Set(key, (object?)value);
-
-    public bool Set(Symbol key, object? value)
-        => Update((key, value), static (s, bag) => bag.Set(s.key, s.value));
-
     // SetMany
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetMany(PropertyBag items)
-        => SetMany(items.RawItems ?? []);
-
-    public void SetMany(params PropertyBagItem[] items)
-        => Update(items, static (items1, bag) => bag.SetMany(items1));
-
-    // Remove
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Remove<T>()
-        => Remove(typeof(T));
-
-    public bool Remove(Symbol key)
-        => Update(key, static (k, bag) => bag.Remove(k));
-
-    // Clear
-
-    public void Clear()
-        => Update(_ => default);
+    public void SetMany(params ReadOnlySpan<PropertyBagItem> items)
+    {
+        bool isChanged;
+        lock (_lock) {
+            var oldSnapshot = _snapshot;
+            _snapshot = oldSnapshot.SetMany(items);
+            isChanged = _snapshot != oldSnapshot;
+        }
+        if (isChanged)
+            Changed?.Invoke();
+    }
 
     // Update
 

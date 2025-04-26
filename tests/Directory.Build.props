@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="latest" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Defaults for test projects -->
   <PropertyGroup>
-    <TargetFrameworks Condition="$(UseMultitargeting)">net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;net48;net471</TargetFrameworks>
-    <TargetFramework Condition="!$(UseMultitargeting)">net8.0</TargetFramework>
-    <!-- Compiler & toolchain -->
-    <BaseIntermediateOutputPath>$(SolutionDir)artifacts\obj\$(MSBuildProjectName)</BaseIntermediateOutputPath>
-    <OutputPath>$(SolutionDir)artifacts\tests</OutputPath>
-    <IsPackable>false</IsPackable>
-    <IsPublishable>false</IsPublishable>
+    <TargetFrameworks Condition="$(UseMultitargeting)">net9.0;net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;net48;net471</TargetFrameworks>
     <!-- PolySharp -->
     <PolySharpIncludeRuntimeSupportedAttributes>true</PolySharpIncludeRuntimeSupportedAttributes>
+  </PropertyGroup>
+
+  <!-- Output paths -->
+  <PropertyGroup>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(RepoRoot)artifacts\tests</ArtifactsPath>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
     <!-- Copy all references to output folder (important for coverage tools) -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
@@ -34,6 +38,9 @@
     <NoWarn>$(NoWarn);VSTHRD200;VSTHRD110;VSTHRD103;VSTHRD003;VSTHRD002</NoWarn>
 
     <!-- Testing-specific -->
+    <!-- IL2060: Call to 'Method' cannot be statically analyzed -->
+    <!-- IL2111: Method 'Method' with parameters or return value with `DynamicallyAccessedMembersAttribute` is accessed via reflection. Trimmer can't guarantee availability of the requirements of the method. -->
+    <NoWarn>$(NoWarn);IL2060;IL2111</NoWarn>
     <!-- CA1032: Add the following constructor to WeirdException: ... -->
     <!-- CA1052: Type 'Nested' is a static holder type but is neither static nor NotInheritable -->
     <!-- CA1303: Method M passes a literal string as parameter 'value' of a call to 'void Console.WriteLine(string? value)'. Retrieve the following string(s) from a resource table instead: ... -->
@@ -68,27 +75,27 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="AutoFixture.AutoMoq" />
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
     <PackageReference Include="ILogger.Moq" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Moq" />
     <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Polyfills -->
-  <ItemGroup Condition="!($(TargetFramework.StartsWith('net8')))">
-    <PackageReference Include="PolySharp" />
+  <ItemGroup Condition="!($(TargetFramework.StartsWith('net9')) or $(TargetFramework.StartsWith('net8')))">
+    <PackageReference Include="PolySharp" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Analyzers -->
   <ItemGroup>
-    <PackageReference Include="xunit.analyzers" />
-    <PackageReference Include="Roslynator.Analyzers" />
-    <PackageReference Include="Meziantou.Analyzer" />
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" />
+    <PackageReference Include="xunit.analyzers" PrivateAssets="all" />
+    <PackageReference Include="Roslynator.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Global usings -->

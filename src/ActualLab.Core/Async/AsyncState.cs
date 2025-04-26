@@ -4,29 +4,28 @@ namespace ActualLab.Async;
 
 public interface IAsyncState
 {
-    bool IsFinal { get; }
-    bool HasNext { get; }
-    IAsyncState? Next { get; }
-    IAsyncState Last { get; }
-    Task WhenNext();
-    Task WhenNext(CancellationToken cancellationToken);
+    public bool IsFinal { get; }
+    public bool HasNext { get; }
+    public IAsyncState? Next { get; }
+    public IAsyncState Last { get; }
+    public Task WhenNext();
+    public Task WhenNext(CancellationToken cancellationToken);
 }
 
 public interface IAsyncState<out T> : IAsyncState, IAsyncEnumerable<IAsyncState<T>>
 {
-    T Value { get; }
-    new IAsyncState<T>? Next { get; }
-    new IAsyncState<T> Last { get; }
+    public T Value { get; }
+    public new IAsyncState<T>? Next { get; }
+    public new IAsyncState<T> Last { get; }
 
-    Task<IAsyncState> When(Func<T, bool> predicate, CancellationToken cancellationToken = default);
-    IAsyncEnumerable<T> Changes(CancellationToken cancellationToken = default);
+    public Task<IAsyncState> When(Func<T, bool> predicate, CancellationToken cancellationToken = default);
+    public IAsyncEnumerable<T> Changes(CancellationToken cancellationToken = default);
 }
 
-public sealed class AsyncState<T>(T value, bool runContinuationsAsynchronously)
+public sealed class AsyncState<T>(T value)
     : IAsyncState<T>, IAsyncEnumerable<AsyncState<T>>
 {
-    private readonly TaskCompletionSource<AsyncState<T>> _next
-        = TaskCompletionSourceExt.New<AsyncState<T>>(runContinuationsAsynchronously);
+    private readonly AsyncTaskMethodBuilder<AsyncState<T>> _next = AsyncTaskMethodBuilderExt.New<AsyncState<T>>();
 
     public T Value { get; } = value;
     public bool IsFinal => _next.Task.IsFaultedOrCancelled();
@@ -95,8 +94,11 @@ public sealed class AsyncState<T>(T value, bool runContinuationsAsynchronously)
     public Task<AsyncState<T>> WhenNext(CancellationToken cancellationToken)
         => _next.Task.WaitAsync(cancellationToken);
 
-    async Task<IAsyncState> IAsyncState<T>.When(Func<T, bool> predicate, CancellationToken cancellationToken)
-        => await When(predicate, cancellationToken).ConfigureAwait(false);
+    Task<IAsyncState> IAsyncState<T>.When(Func<T, bool> predicate, CancellationToken cancellationToken)
+        => When(predicate, cancellationToken)
+            .ContinueWith(
+                static t => (IAsyncState)t.GetAwaiter().GetResult(),
+                CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
     public async Task<AsyncState<T>> When(Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
@@ -123,30 +125,26 @@ public sealed class AsyncState<T>(T value, bool runContinuationsAsynchronously)
 
     public AsyncState<T> SetNext(T value)
     {
-        var next = new AsyncState<T>(value, runContinuationsAsynchronously);
+        var next = new AsyncState<T>(value);
+        // ReSharper disable once PossiblyImpureMethodCallOnReadonlyVariable
         _next.SetResult(next);
         return next;
     }
 
     public AsyncState<T> TrySetNext(T value)
     {
-        var next = new AsyncState<T>(value, runContinuationsAsynchronously);
+        var next = new AsyncState<T>(value);
         return _next.TrySetResult(next) ? next : this;
     }
 
     // SetFinal & TrySetFinal
 
     public void SetFinal(Exception error)
+        // ReSharper disable once PossiblyImpureMethodCallOnReadonlyVariable
         => _next.SetException(error);
 
     public void SetFinal(CancellationToken cancellationToken)
-    {
-#if NET5_0_OR_GREATER
-        _next.SetCanceled(cancellationToken);
-#else
-        _next.SetCanceled();
-#endif
-    }
+        => _next.TrySetCanceled(cancellationToken);
 
     public bool TrySetFinal(Exception error)
         => _next.TrySetException(error);
@@ -161,7 +159,7 @@ public sealed class AsyncState<T>(T value, bool runContinuationsAsynchronously)
         if (!IsFinal)
             return this;
 
-        _ = _next.Task.Result; // Must throw in case there is an error
+        _ = _next.Task.GetAwaiter().GetResult(); // Must throw in case there is an error
         throw Errors.AsyncStateIsFinal();
     }
 
@@ -170,7 +168,7 @@ public sealed class AsyncState<T>(T value, bool runContinuationsAsynchronously)
         if (!IsFinal)
             return this;
 
-        _ = _next.Task.Result; // Must throw in case there is an error
+        _ = _next.Task.GetAwaiter().GetResult(); // Must throw in case there is an error
         throw errorFactory.Invoke();
     }
 }

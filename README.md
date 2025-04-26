@@ -4,30 +4,56 @@
 [![NuGet Version](https://img.shields.io/nuget/v/ActualLab.Core)](https://www.nuget.org/packages?q=tags%3A%22actual_lab_fusion%22+Owner%3A%22Actual.chat%22)
 [![MIT License](https://img.shields.io/github/license/actuallab/Fusion?)](https://github.com/ActualLab/Fusion/blob/master/LICENSE)
 <br/>
-[![Discord Server](https://img.shields.io/discord/729970863419424788.svg)](https://discord.gg/EKEwv6d) 
+[![Fusion Place](https://img.shields.io/badge/Fusion%20%40%20Actual%20Chat-BE145B)](https://actual.chat/chat/s-1KCdcYy9z2-uJVPKZsbEo) 
 ![Commit Activity](https://img.shields.io/github/commit-activity/m/actuallab/Fusion)
 [![Downloads](https://img.shields.io/nuget/dt/ActualLab.Core)](https://www.nuget.org/packages?q=tags%3A%22actual_lab_fusion%22+Owner%3A%22Actual.chat%22)
 
-Fusion is a .NET library that implements 🦄 **D**istributed **REA**ctive **M**emoization (**DREAM**) &ndash; 
-a novel abstraction somewhat similar to MobX or Flux, but **designed to deal with an arbitrary large state** 
-spanning across your backend microservices, API servers, and reaching even every client of your app.
+| [ActualLab.Fusion Video](https://youtu.be/eMO7AmI6ui4)<br/>[<img src=".\docs\img\Fusion-Video.jpg" title="ActualLab.Fusion, the distributed state sync monster" width="300"/>](https://youtu.be/eMO7AmI6ui4) | [ActualLab.Rpc Video](https://youtu.be/vwm1l8eevak)<br/>[<img src="./docs/img/ActualLab-Rpc-Video.jpg" title="ActualLab.Rpc - the fastest RPC protocol on .NET" width="300"/>](https://youtu.be/vwm1l8eevak) |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 
-Fusion solves a set of infamously hard problems with a single hammer:
+## Table of Contents
 
-| Problem | So you don't need... |
-|-|-|
-| 📇 Caching | Redis, memcached, ... |
-| 🤹 Real-time cache invalidation | No good solutions - <br/>it's an [infamously hard problem](https://martinfowler.com/bliki/TwoHardThings.html) |
-| 🚀 Real-time updates | SignalR, WebSockets, gRPC, ... |
-| 🤬 Network chattiness | A fair amount of code |
-| 🔌 Offline mode support | A fair amount of code |
-| 📱 Client-side state management | MobX, Flux/Redux, Recoil, ... |
-| 💰 Single codebase for Blazor WebAssembly, Server, and Hybrid/MAUI | No good alternatives |
+- [Overview](#overview)
+- [Usage](#usage)
+- [Documentation](#documentation)
+- [Samples](#samples)
+- ["What is your evidence?"](#what-is-your-evidence)
+- [Is Fusion fast?](#is-fusion-fast)
+- [Does Fusion scale?](#does-fusion-scale)
+- [Show me the code!](#enough-talk-show-me-the-code)
+- [Why Fusion is a game changer for real-time apps?](#why-fusion-is-a-game-changer-for-real-time-apps)
+- [Why Fusion is a game changer for Blazor apps with complex UI?](#why-fusion-is-a-game-changer-for-blazor-apps-with-complex-ui)
+- [Next Steps](#next-steps)
+- [Posts And Other Content](#posts-and-other-content)
 
-And the best part is: **Fusion does all of that transparently for you,** so Fusion-based code is almost identical to a code that doesn't involve it. All you need is to:
-- "Implement" `IComputeService` (a tagging interface) on your Fusion service to ensure call intercepting proxy is generated for it in compile time.
-- Mark methods requiring "Fusion behavior" with `[ComputeMethod]` + declare them as `virtual`
-- Register the service via `serviceCollection.AddFusion().AddService<MyService>()`
+## Overview
+
+`ActualLab.Fusion` is a successor of [Stl.Fusion](https://github.com/servicetitan/Stl.Fusion) - a distributed reactive memoization library for .NET that simplifies real-time updates, caching, and managing client-side state in complex distributed applications. By using dependency tracking and automated invalidation, Fusion ensures that values are recomputed only when necessary, making your application both efficient and responsive.
+
+You can think of Fusion as:
+
+- `make` or `msbuild`, but operating on functions and their outputs instead of source files and build artifacts.
+- An infinite Excel, where cell names are values like `"service.Method(arg1, arg2, ...)"` constructed for every call to a subset of services in your app, and formulas are the bodies of these methods.
+- MobX, but managing an arbitrarily large state spread across multiple machines rather than a small UI state within a single process.
+
+Fusion reduces complexity for developers, allowing them to build scalable, real-time apps without the usual headaches associated with a set of notoriously difficult problems:
+
+- **Real-Time State Synchronization**.
+- **Distributed Caching and Dependency Tracking**: Fusion tracks data dependencies and performs real-time cache invalidation to ensure only necessary values are recomputed.
+- **Persistent Client-Side Caches**: Fusion-based clients can operate even when offline, providing a seamless experience.
+- **Extremely Efficient RPC**: Fusion's RPC client eliminates unnecessary network round trips by using cached results that aren't marked as stale. The stale-while-revalidate strategy allows Fusion-based clients to rely on speculative execution to pack hundreds of calls into a single transmission frame. As a result, all the data needed for a given UI view is often retrieved via a single network round trip.
+- **UI State Management**: The UI is just one of the application states Fusion manages, removing the need for specialized libraries like Recoil.
+- **Unified Codebase for All Clients**: Fusion allows you to maintain a single codebase for all of your clients, including Blazor Server, Blazor WebAssembly, and Blazor Hybrid/MAUI.
+
+And the best part is: **Fusion does all of that transparently for you,** so Fusion-based code is almost identical to code that does not involve it.
+
+## Usage
+
+To use Fusion, you must:
+- Reference `ActualLab.Fusion` NuGet package
+- "Implement" `IComputeService` (a tagging interface) on your Fusion service to ensure call intercepting proxy is generated for it.
+- Mark methods requiring "Fusion behavior" with `[ComputeMethod]` and declare them as `virtual`
+- Register the service via `serviceCollection.AddFusion().AddComputeService<MyService>()`
 - Resolve and use them usual - i.e., pass them as dependencies, call their methods, etc.
 
 The magic happens when `[ComputeMethod]`-s are invoked:
@@ -36,10 +62,10 @@ The magic happens when `[ComputeMethod]`-s are invoked:
 
 The second step allows Fusion to track which values are expected to change when one of them changes. It's quite similar to [lot traceability](https://en.wikipedia.org/wiki/Traceability), but implemented for arbitrary functions rather than manufacturing processes.
 
-The last piece of a puzzle is `Computed.Invalidate()` block allowing to tag cached results as "inconsistent with the ground truth". Here is how you use it:
+The last piece of a puzzle is `Invalidation.Begin()` block allowing to tag cached results as "inconsistent with the ground truth". Here is how you use it:
 ```cs
 var avatars = await GetUserAvatars(userId);
-using (Computed.Invalidate()) {
+using (Invalidation.Begin()) {
     // Any [ComputeMethod] invoked inside this block doesn't run normally,
     // but invalidates the result of the identical call instead.
     // Such calls complete synchronously and return completed Task<TResult>, 
@@ -53,9 +79,9 @@ using (Computed.Invalidate()) {
 
 *The invalidation is always transitive:* if `GetUserProfile(3)` calls `GetUserAvatar("3:ava1")`, and `GetUserAvatar("3:ava1")` gets invalidated, `GetUserProfile(3)` gets invalidated as well.
 
-To make it work, Fusion maintains a dictionary-like structure that tracks recent and "observed" call results:
-- Key: `(serviceInstance, method, call arguments...)`
-- Value: [Computed<T>], which stores the result, consistency state (`Computing`, `Consistent`, `Invalidated`) and dependent-dependency links. `Computed<T>` instances are nearly immutable: once constructed, they can only transition to `Inconsistent` state.
+To make it work, Fusion maintains a dictionary-like structure that tracks every call result, where:
+- Key is ~ `(serviceInstance, method, call arguments...)`
+- Value is [Computed<T>], which stores the result, consistency state (`Computing`, `Consistent`, `Invalidated`) and dependent-dependency links. `Computed<T>` instances are nearly immutable: once constructed, they can only transition to `Inconsistent` state.
 
 You can "pull" the `Computed<T>` instance "backing" certain call like this:
 ```cs
@@ -92,6 +118,11 @@ So **Fusion abstracts away the "placement" of a service**, and does it much bett
 
 ## Documentation
 
+These two videos cover the most interesting parts of Fusion:
+
+| [ActualLab.Fusion Video](https://youtu.be/eMO7AmI6ui4)<br/>[<img src=".\docs\img\Fusion-Video.jpg" title="ActualLab.Fusion, the distributed state sync monster" width="300"/>](https://youtu.be/eMO7AmI6ui4) | [ActualLab.Rpc Video](https://youtu.be/vwm1l8eevak)<br/>[<img src="./docs/img/ActualLab-Rpc-Video.jpg" title="ActualLab.Rpc - the fastest RPC protocol on .NET" width="300"/>](https://youtu.be/vwm1l8eevak) |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
 [<img align="right" width="150" src="./docs/img/FusionSlides.jpg"/>](https://alexyakunin.github.io/ActualLab.Fusion.Materials/Slides/Fusion_v2/Slides.html)
 If you prefer slides, check out
 ["Why real-time web apps need Blazor and Fusion?" talk](https://alexyakunin.github.io/ActualLab.Fusion.Materials/Slides/Fusion_v2/Slides.html) -
@@ -105,7 +136,7 @@ Check out [Samples]; some of them are covered further in this document.
 
 ## "What is your evidence?"<sup><a href="https://www.youtube.com/watch?v=7O-aNYTtx44<">*</a></sup>
 
-**All of this sounds way too good to be true, right?** That's why there are lots of visual proofs in the remaining part of this document. But if you'll find anything concerning in Fusion's source code or [samples], please feel free to grill us with questions on [Discord]!
+**All of this sounds way too good to be true, right?** That's why there are lots of visual proofs in the remaining part of this document. But if you'll find anything concerning in Fusion's source code or [samples], please feel free to grill us with questions @ [Fusion Place]!
 
 Let's start with some big guns:
 
@@ -121,15 +152,17 @@ Let's start with some big guns:
 > We're posting some code examples from Actual Chat codebase [here](https://actual.chat/chat/san4Cohzym), 
 > so join this chat to learn how we use it in a real app.
 
-Now, the samples:
+## Samples
+
+1. Clone [Fusion Samples] repository: `git clone git@github.com:ActualLab/Fusion.Samples.git`
+2. Follow the instructions from
+   [README.md](https://github.com/ActualLab/Fusion.Samples/blob/master/README.md)
+   to build and run everything.
 
 Below is [Fusion+Blazor Sample](https://github.com/ActualLab/Fusion.Samples#3-blazor-samples)
 delivering real-time updates to 3 browser windows:
 
 ![](docs/img/ActualLab-Fusion-Chat-Sample.gif)
-
-<img src="https://img.shields.io/badge/-Live!-red" valign="middle"> Play with 
-[live version of this sample](https://fusion-samples.servicetitan.com) right now!
 
 The sample supports [**both** Blazor Server and Blazor WebAssembly 
 hosting modes](https://docs.microsoft.com/en-us/aspnet/core/blazor/hosting-models?view=aspnetcore-3.1).
@@ -219,7 +252,7 @@ public class ExampleService : IComputeService
         // but since GetPair uses GetValue, it will be invalidated 
         // automatically once we invalidate GetValue.
         await File.WriteAllTextAsync(_prefix + key, value);
-        using (Computed.Invalidate()) {
+        using (Invalidation.Begin()) {
             // This is how you invalidate what's changed by this method.
             // Call arguments matter: you invalidate only a result of a 
             // call with matching arguments rather than every GetValue 
@@ -368,12 +401,10 @@ kills the chattiness you'd expect from a regular client-side proxy.
 
 * Read [Quick Start], [Cheat Sheet], or the whole [Tutorial]
 * Check out [Samples]
-* Join our [Discord Server] to ask questions and track project updates. *If you're curious, "why Discord," the server was created long before the first line of [Actual Chat]'s code was written. However, a Fusion-powered alternative will be available quite soon :)*
+* Join [Fusion Place] to ask questions and track project updates.
 
 ## Posts And Other Content
-* [Fusion: 1st birthday, 1K+ stars on GitHub, System.Text.Json support in v1.4](https://alexyakunin.medium.com/fusion-1st-birthday-1k-stars-on-github-system-text-json-support-in-v1-4-c73e9feb45c7?source=friends_link&sk=2e261e0dacce92f05d31baac400c3032)
 * [Popular UI architectures compared & how Blazor+Fusion UI fits in there](https://itnext.io/the-most-popular-ui-architectures-and-how-fusion-based-ui-fits-in-there-fb47e45038a7?source=friends_link&sk=bef676ccd1f3c6e6148178bf05346852)
-* [Fusion: Current State and Upcoming Features](https://alexyakunin.medium.com/fusion-current-state-and-upcoming-features-88bc4201594b?source=friends_link&sk=375290c4538167fe99419a744f3d42d5)
 * [The Ungreen Web: Why our web apps are terribly inefficient?](https://alexyakunin.medium.com/the-ungreen-web-why-our-web-apps-are-terribly-inefficient-28791ed48035?source=friends_link&sk=74fb46086ca13ff4fea387d6245cb52b)
 * [Why real-time UI is inevitable future for web apps?](https://medium.com/@alexyakunin/features-of-the-future-web-apps-part-1-e32cf4e4e4f4?source=friends_link&sk=65dacdbf670ef9b5d961c4c666e223e2)
 * [How similar is Fusion to SignalR?](https://medium.com/@alexyakunin/how-similar-is-stl-fusion-to-signalr-e751c14b70c3?source=friends_link&sk=241d5293494e352f3db338d93c352249)
@@ -408,6 +439,5 @@ please help us to make it better by completing [Fusion Feedback Form]
 [MMORPG]: https://en.wikipedia.org/wiki/Massively_multiplayer_online_role-playing_game
 [Actual Chat]: https://actual.chat
 
-[Discord]: https://discord.gg/EKEwv6d
-[Discord Server]: https://discord.gg/EKEwv6d
+[Fusion Place]: https://actual.chat/chat/s-1KCdcYy9z2-uJVPKZsbEo
 [Fusion Feedback Form]: https://forms.gle/TpGkmTZttukhDMRB6

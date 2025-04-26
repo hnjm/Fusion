@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ActualLab.Internal;
 
 public static class Errors
@@ -71,8 +73,10 @@ public static class Errors
 
     public static Exception TaskIsNotCompleted()
         => new InvalidOperationException("Task is expected to be completed at this point, but it's not.");
-    public static Exception TaskIsFaultedButNoExceptionAvailable()
-        => new InvalidOperationException("Task hasn't completed successfully but has no Exception.");
+    public static Exception TaskIsNeitherFaultedNorCancelled()
+        => new InvalidOperationException("Task is neither faulted nor cancelled.");
+    public static Exception TaskAwaiterMustThrow()
+        => new InvalidOperationException( "Task is faulted or canceled, but its awaiter doesn't throw an exception.");
 
     public static Exception AsyncStateIsFinal()
         => new InvalidOperationException("AsyncState is expected to be non-final at this point, but it's final.");
@@ -94,11 +98,10 @@ public static class Errors
     public static Exception AlreadyDisposedOrDisposing<T>()
         => AlreadyDisposedOrDisposing(typeof(T));
 
-    public static Exception AlreadyStopped()
-        => new InvalidOperationException("The process or task is already stopped.");
-
     public static Exception KeyAlreadyExists()
         => new InvalidOperationException("Specified key already exists.");
+    public static Exception KeyAlreadyExists<TEntity>()
+        => new InvalidOperationException($"The {typeof(TEntity).GetName()} with the specified key already exists.");
     public static Exception CollectionIsEmpty()
         => new InvalidOperationException("Collection is empty.");
     public static Exception CollectionIsFull()
@@ -152,10 +155,9 @@ public static class Errors
         => Format(typeof(TTarget), value);
     public static Exception Format(Type target, string? value = null)
         => Format(target.GetName(), value);
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We jsonify string here, so no reflection is needed")]
     public static Exception Format(string target, string? value)
-#pragma warning disable IL2026 // We format string as JSON here, so no reflection needed
         => Format($"Invalid {target} format: {(value == null ? "null" : JsonFormatter.Format(value))}");
-#pragma warning restore IL2026
 
     public static Exception Invalid7BitEncoded<TValue>()
         => Format($"Invalid 7-bit encoded {typeof(TValue).GetName()}");

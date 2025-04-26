@@ -1,38 +1,24 @@
-using System.Diagnostics.CodeAnalysis;
-using ActualLab.Internal;
 using ActualLab.Rpc;
-using ActualLab.Rpc.Caching;
 using ActualLab.Rpc.Infrastructure;
+using ActualLab.Rpc.Internal;
 
 namespace ActualLab.Fusion.Client.Internal;
 
-public interface IRpcOutboundComputeCall
+public abstract class RpcOutboundComputeCall(RpcOutboundContext context) : RpcOutboundCall(context)
 {
-    string? ResultVersion { get; }
-
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    void SetInvalidated(RpcInboundContext context);
-}
-
-public class RpcOutboundComputeCall<TResult>(RpcOutboundContext context)
-    : RpcOutboundCall<TResult>(context), IRpcOutboundComputeCall
-{
-    protected readonly TaskCompletionSource<Unit> WhenInvalidatedSource
-        = TaskCompletionSourceExt.New<Unit>(); // Must not allow synchronous continuations!
+    protected readonly AsyncTaskMethodBuilder WhenInvalidatedSource = AsyncTaskMethodBuilderExt.New(); // Must not allow synchronous continuations!
 
     public override string DebugTypeName => "=>";
     public override int CompletedStage
-        => UntypedResultTask.IsCompleted
+        => ResultTask.IsCompleted
             ? WhenInvalidated.IsCompleted
                 ? RpcCallStage.Invalidated | RpcCallStage.Unregistered
                 : RpcCallStage.ResultReady
             : 0;
 
-    public string? ResultVersion { get; protected set; }
     // ReSharper disable once InconsistentlySynchronizedField
     public Task WhenInvalidated => WhenInvalidatedSource.Task;
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override int? GetReconnectStage(bool isPeerChanged)
     {
         lock (Lock) {
@@ -52,73 +38,68 @@ public class RpcOutboundComputeCall<TResult>(RpcOutboundContext context)
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void SetResult(object? result, RpcInboundContext? context)
     {
-        var resultVersion = context.GetResultVersion();
         // We always use Lock to update ResultSource in this type
         lock (Lock) {
             // The code below is a copy of base.SetResult
             // except the Unregister call in the end.
             // We don't unregister the call here, coz
             // we'll need to await for invalidation
-            var typedResult = default(TResult)!;
-            try {
-                if (result != null)
-                    typedResult = (TResult)result;
-            }
-            catch (InvalidCastException) {
-                // Intended
-            }
-
-            if (!ResultSource.TrySetResult(typedResult)) {
-                // Result was set earlier; let's check for non-peer set or version mismatch
-                if (resultVersion == null || !resultVersion.Equals(ResultVersion, StringComparison.Ordinal))
-                    SetInvalidatedUnsafe(true);
+#if DEBUG
+            if (!MethodDef.IsInstanceOfUnwrappedReturnType(result)) {
+                var error = Errors.InvalidResultType(MethodDef.UnwrappedReturnType, result?.GetType());
+                SetError(error, context);
+                Peer.InternalServices.Log.LogError(error, "Got incorrect call result type: {Call}", this);
                 return;
             }
-
-            CompleteKeepRegistered();
-            ResultVersion = resultVersion;
-            if (context != null)
-                Context.CacheInfoCapture?.CaptureValue(context.Message);
+#endif
+            if (ResultSource.TrySetResult(result)) {
+                CompleteKeepRegistered();
+                Context.CacheInfoCapture?.CaptureValue(context!.Message);
+            }
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void SetMatch(RpcInboundContext? context)
     {
-        var resultVersion = context.GetResultVersion();
         // We always use Lock to update ResultSource in this type
         lock (Lock) {
             // The code below is a copy of base.SetResult
             // except the Unregister call in the end.
             // We don't unregister the call here, coz
             // we'll need to await for invalidation
-            var cacheEntry = Context.CacheInfoCapture?.CacheEntry as RpcCacheEntry<TResult>;
+            var cacheEntry = Context.CacheInfoCapture?.CacheEntry;
             if (cacheEntry == null) {
-                SetError(Rpc.Internal.Errors.MatchButNoCachedEntry(), null);
+                var error = Errors.MatchButNoCachedEntry();
+                SetError(error, context: null);
+                Peer.InternalServices.Log.LogError(error,
+                    "Got 'Match', but the outbound call has no cached entry: {Call}", this);
                 return;
             }
 
-            if (!ResultSource.TrySetResult(cacheEntry.Result)) {
-                // Result was set earlier; let's check for non-peer set or version mismatch
-                if (resultVersion == null || !resultVersion.Equals(ResultVersion, StringComparison.Ordinal))
-                    SetInvalidatedUnsafe(true);
+            var result = cacheEntry.DeserializedValue;
+#if DEBUG
+            if (!MethodDef.IsInstanceOfUnwrappedReturnType(result)) {
+                var error = Errors.InvalidResultType(MethodDef.UnwrappedReturnType, result?.GetType());
+                SetError(error, context);
+                Peer.InternalServices.Log.LogError(error,
+                    "Got 'Match', but cache entry's serialized value has incorrect type: {Call}", this);
                 return;
             }
-
-            CompleteKeepRegistered();
-            ResultVersion = resultVersion;
-            if (context != null)
+#endif
+            if (ResultSource.TrySetResult(result)) {
+                CompleteKeepRegistered();
                 Context.CacheInfoCapture?.CaptureValue(cacheEntry.Value);
+            }
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void SetError(Exception error, RpcInboundContext? context, bool assumeCancelled = false)
     {
-        var resultVersion = context.GetResultVersion();
+        // SetError call not only sets the error, but also
+        // invalidates computed method calls awaiting the invalidation, if context == null.
+
         var oce = error as OperationCanceledException;
         if (error is RpcRerouteException)
             oce = null; // RpcRerouteException is OperationCanceledException, but must be exposed as-is here
@@ -128,23 +109,15 @@ public class RpcOutboundComputeCall<TResult>(RpcOutboundContext context)
             var isResultSet = oce != null
                 ? ResultSource.TrySetCanceled(cancellationToken)
                 : ResultSource.TrySetException(error);
-            if (!isResultSet) {
-                // Result was set earlier; let's check for non-peer set or version mismatch
-                if (resultVersion == null || !resultVersion.Equals(ResultVersion, StringComparison.Ordinal))
-                    SetInvalidatedUnsafe(!assumeCancelled);
-                return;
+            if (isResultSet) {
+                CompleteKeepRegistered();
+                Context.CacheInfoCapture?.CaptureValue(oce != null, error, cancellationToken);
             }
-
-            // Result was just set
-            CompleteKeepRegistered();
-            ResultVersion = resultVersion;
-            Context.CacheInfoCapture?.CaptureValue(oce != null, error, cancellationToken);
             if (context == null) // Non-peer set
                 SetInvalidatedUnsafe(!assumeCancelled);
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override bool Cancel(CancellationToken cancellationToken)
     {
         // We always use Lock to update ResultSource in this type
@@ -152,38 +125,41 @@ public class RpcOutboundComputeCall<TResult>(RpcOutboundContext context)
             var isResultSet = ResultSource.TrySetCanceled(cancellationToken);
             if (isResultSet)
                 Context.CacheInfoCapture?.CaptureValue(cancellationToken);
-            WhenInvalidatedSource.TrySetResult(default);
+            WhenInvalidatedSource.TrySetResult();
             CompleteAndUnregister(notifyCancelled: true);
             return isResultSet;
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void SetInvalidated(RpcInboundContext? context)
         // Let's be pessimistic here and ignore version check here
         => SetInvalidated(false);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void SetInvalidated(bool notifyCancelled)
     {
         lock (Lock) {
             if (!SetInvalidatedUnsafe(notifyCancelled))
                 return;
 
-            if (ResultSource.TrySetCanceled())
+            if (ResultSource.TrySetCanceled(CancellationTokenExt.Canceled))
                 Context.CacheInfoCapture?.CaptureValue(CancellationToken.None);
         }
     }
 
     // Private methods
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     private bool SetInvalidatedUnsafe(bool notifyCancelled)
     {
-        if (!WhenInvalidatedSource.TrySetResult(default))
+        if (!WhenInvalidatedSource.TrySetResult())
             return false;
 
         CompleteAndUnregister(notifyCancelled);
         return true;
     }
+}
+
+public sealed class RpcOutboundComputeCall<TResult> : RpcOutboundComputeCall
+{
+    public RpcOutboundComputeCall(RpcOutboundContext context) : base(context)
+        => ResultSource = CreateResultSource<TResult>();
 }

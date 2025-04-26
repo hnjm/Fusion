@@ -1,11 +1,7 @@
-Dynamic Routing:
-- Test - covering switch to local service
+"AOT friendliness" refactoring:
+- ApiArray -> class
+- ISymbolIdentifier descendants: convert to classes?
+- Get rid of [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Generic<>))] 
 
-Edge cases:
-- Invalidation
-- Commands + invalidation
-- Capture with rerouting
-
-Near-term:
-- Robust routing tests
-- Propagate activity for nested commands (even w/ isolate)
+Docs:
+- Rewrite documentation

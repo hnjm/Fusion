@@ -1,8 +1,9 @@
 using System.Security;
-using ActualLab.CommandR.Operations;
 using ActualLab.Fusion.Authentication;
 using ActualLab.Fusion.Authentication.Services;
+using ActualLab.Fusion.EntityFramework;
 using ActualLab.Fusion.Tests.Model;
+using ActualLab.Generators;
 using ActualLab.Reflection;
 using User = ActualLab.Fusion.Authentication.User;
 
@@ -52,6 +53,18 @@ public class InMemoryInMemoryAuthServiceTest : AuthServiceTestBase
 
 public abstract class AuthServiceTestBase(ITestOutputHelper @out) : FusionTestBase(@out)
 {
+    public override Task InitializeAsync()
+    {
+        StringAsSymbolMemoryPackFormatterAttribute.IsEnabled = RandomShared.NextDouble() < 0.5;
+        return base.InitializeAsync();
+    }
+
+    public override Task DisposeAsync()
+    {
+        StringAsSymbolMemoryPackFormatterAttribute.IsEnabled = false;
+        return base.DisposeAsync();
+    }
+
     [Fact]
     public async Task ContainerConfigTest()
     {
@@ -85,7 +98,7 @@ public abstract class AuthServiceTestBase(ITestOutputHelper @out) : FusionTestBa
         var authClient = ClientServices.GetRequiredService<IAuth>();
 
         for (var i = -100; i < 100; i++) {
-            var user = await authBackend.GetUser(default, i.ToString());
+            var user = await authBackend.GetUser(DbShard.Single, i.ToString());
             user.Should().BeNull();
         }
 
@@ -221,10 +234,10 @@ public abstract class AuthServiceTestBase(ITestOutputHelper @out) : FusionTestBa
         user.Claims["id"].Should().Be("robert");
 
         // Server-side methods to get the same user
-        var sameUser = await webAuthBackend.GetUser(default, user.Id);
+        var sameUser = await webAuthBackend.GetUser(DbShard.Single, user.Id);
         sameUser!.Id.Should().Be(user.Id);
         sameUser.Name.Should().Be(user.Name);
-        sameUser.Identities.Keys.Select(i => i.Id.Value).Should().BeEquivalentTo("g:1");
+        sameUser.Identities.Keys.Select(i => i.Id).Should().BeEquivalentTo("g:1");
         bob = user;
 
         // Checking if the client is able to see the same user & sessions
@@ -274,7 +287,7 @@ public abstract class AuthServiceTestBase(ITestOutputHelper @out) : FusionTestBa
         user.Should().BeNull();
 
         user = user.OrGuest();
-        user.Id.Value.Should().Be("");
+        user.Id.Should().Be("");
         user.ToClaimsPrincipal().Identity!.IsAuthenticated.Should().BeFalse();
         user.Identities.Count.Should().Be(0);
     }
@@ -341,7 +354,7 @@ public abstract class AuthServiceTestBase(ITestOutputHelper @out) : FusionTestBa
         var user = await auth.GetUser(sessionA);
         user.Should().NotBeNull();
         user!.Name.Should().Be(bob.Name);
-        bob = (await authBackend.GetUser(default, user.Id)).Require(User.MustBeAuthenticated);
+        bob = (await authBackend.GetUser(DbShard.Single, user.Id)).Require(User.MustBeAuthenticated);
 
         sessions = await auth.GetUserSessions(sessionA);
         sessions.Select(s => s.SessionHash).Should().BeEquivalentTo(sessionA.Hash);

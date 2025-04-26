@@ -14,10 +14,10 @@ public class SessionResolverTest
             })
             .BuildServiceProvider();
 
-        var session = new Session(RandomSymbolGenerator.Default.Next());
+        var session = new Session(RandomStringGenerator.Default.Next());
 
         // Root
-        var c = (IServiceProvider) services;
+        var c = (IServiceProvider)services;
         c.IsScoped().Should().BeFalse();
 
         var sp = c.GetRequiredService<ISessionResolver>();

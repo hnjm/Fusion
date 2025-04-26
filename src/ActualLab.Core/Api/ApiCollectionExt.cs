@@ -6,29 +6,17 @@ public static class ApiCollectionExt
 
     // ToApiArray
 
-    public static Api.ApiArray<T> ToApiArray<T>(this T[] source, bool copy = false)
-        => new(copy ? source.ToArray() : source);
+    public static ApiArray<T> ToApiArray<T>(this T[] source, bool makeCopy = true)
+        => new(makeCopy ? source.Duplicate() : source);
 
-    public static Api.ApiArray<T> ToApiArray<T>(this IEnumerable<T> source)
+    public static ApiArray<T> ToApiArray<T>(this IReadOnlyCollection<T> source)
         => new(source);
 
-    public static async Task<Api.ApiArray<TSource>> ToApiArrayAsync<TSource>(
-        this IAsyncEnumerable<TSource> source,
-        CancellationToken cancellationToken = default)
-    {
-        var buffer = ArrayBuffer<TSource>.Lease(false);
-        try {
-            await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
-                buffer.Add(item);
-            return buffer.Count == 0 ? default : new Api.ApiArray<TSource>(buffer.ToArray());
-        }
-        finally {
-            buffer.Release();
-        }
-    }
+    public static ApiArray<T> ToApiArray<T>(this IEnumerable<T> source)
+        => new(source);
 
     // That's just a bit more efficient conversion than .Select().ToApiArray()
-    public static Api.ApiArray<TResult> ToApiArray<TSource, TResult>(
+    public static ApiArray<TResult> ToApiArray<TSource, TResult>(
         this IReadOnlyCollection<TSource> source,
         Func<TSource, TResult> selector)
     {
@@ -36,7 +24,24 @@ public static class ApiCollectionExt
         var i = 0;
         foreach (var item in source)
             result[i++] = selector(item);
-        return new Api.ApiArray<TResult>(result);
+        return new ApiArray<TResult>(result);
+    }
+
+    public static async Task<ApiArray<TSource>> ToApiArrayAsync<TSource>(
+        this IAsyncEnumerable<TSource> source,
+        CancellationToken cancellationToken = default)
+    {
+        var buffer = ArrayBuffer<TSource>.Lease(false);
+        try {
+            await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+                buffer.Add(item);
+            return buffer.Count == 0
+                ? ApiArray<TSource>.Empty
+                : new ApiArray<TSource>(buffer.ToArray());
+        }
+        finally {
+            buffer.Release();
+        }
     }
 
     // ToApiList

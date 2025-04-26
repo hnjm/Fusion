@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.Conversion;
-using ActualLab.Internal;
+using ActualLab.Serialization.Internal;
+using MessagePack;
+using Errors = ActualLab.Internal.Errors;
 
 namespace ActualLab;
 
@@ -39,20 +41,25 @@ public interface IOption
     /// <summary>
     /// Indicates whether an option has <see cref="Value"/>.
     /// </summary>
-    bool HasValue { get; }
+    public bool HasValue { get; }
     /// <summary>
     /// Retrieves option's value. Throws <see cref="InvalidOperationException"/> in case option doesn't have one.
     /// </summary>
-    object? Value { get; }
+    public object? Value { get; }
 }
 
 #pragma warning disable CA1036
 
 [StructLayout(LayoutKind.Sequential)] // Important! Pack = 0 -> Pack = Max(sizeof(bool), sizeof(Value))
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+#if NET8_0_OR_GREATER
+[MessagePackObject(true, SuppressSourceGeneration = true)]
+#else
+[MessagePackFormatter(typeof(OptionMessagePackFormatter<>))]
+#endif
 [DebuggerDisplay("{" + nameof(DebugValue) + "}")]
-[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
 public readonly partial struct Option<T>(bool hasValue, T? valueOrDefault)
     : IOption, ICanBeNone<Option<T>>, IEquatable<Option<T>>, IComparable<Option<T>>, IConvertibleTo<ApiOption<T>>
@@ -75,13 +82,13 @@ public readonly partial struct Option<T>(bool hasValue, T? valueOrDefault)
     /// <summary>
     /// Retrieves option's value. Throws <see cref="InvalidOperationException"/> in case option doesn't have one.
     /// </summary>
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public T Value {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get { AssertHasValue(); return ValueOrDefault!; }
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public bool IsNone {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => !HasValue;
@@ -89,8 +96,9 @@ public readonly partial struct Option<T>(bool hasValue, T? valueOrDefault)
 
     /// <inheritdoc />
     // ReSharper disable once HeapView.BoxingAllocation
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     object? IOption.Value => Value;
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     private string DebugValue => ToString();
 
     /// <inheritdoc />
@@ -129,7 +137,7 @@ public readonly partial struct Option<T>(bool hasValue, T? valueOrDefault)
     }
 
     public Option<T> ToApiOption() => new(HasValue, ValueOrDefault);
-    ApiOption<T> IConvertibleTo<ApiOption<T>>.Convert() => new(HasValue, ValueOrDefault);
+    ApiOption<T> IConvertibleTo<ApiOption<T>>.Convert() => new(HasValue, ValueOrDefault!);
 
     // Equality
 
@@ -147,7 +155,7 @@ public readonly partial struct Option<T>(bool hasValue, T? valueOrDefault)
 
     public int CompareTo(Option<T> other)
         => HasValue
-            ? other.HasValue ? Comparer<T>.Default.Compare(ValueOrDefault, other.ValueOrDefault) : 1
+            ? other.HasValue ? Comparer<T>.Default.Compare(ValueOrDefault!, other.ValueOrDefault!) : 1
             : other.HasValue ? -1 : 0;
 
     // Operators

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CommunityToolkit.HighPerformance;
 
 namespace ActualLab.IO;
 
@@ -21,11 +22,11 @@ public readonly partial struct FilePath
     private static readonly Regex TrailingUnderscoresRe = new("_+$", RegexOptions.Compiled);
 #endif
 
-    public static FilePath GetHashedName(
+    public static string GetHashedName(
         string key, string? prefix = null,
         int maxLength = 40, bool alwaysHash = false)
     {
-        if (maxLength < 8 || maxLength > 128)
+        if (maxLength is < 8 or > 128)
             throw new ArgumentOutOfRangeException(nameof(maxLength));
 
         var result = prefix ?? key;
@@ -34,16 +35,18 @@ public readonly partial struct FilePath
 
         var mustAddHash = alwaysHash || !string.Equals(result, key, StringComparison.Ordinal);
         if (mustAddHash || result.Length > maxLength) {
-            var hash = Convert.ToBase64String(BitConverter.GetBytes(key.GetDeterministicHashCode()));
+            var hash = Convert.ToBase64String(BitConverter.GetBytes(key.GetDjb2HashCode()));
             hash = NonAlphaOrNumberRe.Replace(hash, "_");
             hash = LeadingUnderscoresRe.Replace(hash, "");
             hash = TrailingUnderscoresRe.Replace(hash, "");
             var prefixLength = Math.Min(result.Length, maxLength - hash.Length - 1);
             result = $"{result.Substring(0, prefixLength)}_{hash}";
         }
-
         return result;
     }
+
+    public static FilePath GetTempPath()
+        => Path.GetTempPath();
 
     public static FilePath GetApplicationDirectory()
     {
@@ -58,7 +61,7 @@ public readonly partial struct FilePath
         if (appId.IsNullOrEmpty())
             appId = Assembly.GetEntryAssembly()?.GetName()?.Name ?? "unknown";
         var subdirectory = GetHashedName($"{appId}_{GetApplicationDirectory()}");
-        var path = Path.GetTempPath() & subdirectory;
+        var path = GetTempPath() & subdirectory;
         if (!Directory.Exists(path))
             Directory.CreateDirectory(path);
         return path;

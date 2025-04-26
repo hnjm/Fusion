@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ActualLab.DependencyInjection;
 
 public static class ServiceDescriptorExt
@@ -24,6 +26,8 @@ public static class ServiceDescriptorExt
     private static readonly Func<ServiceDescriptor, Type?> ImplementationTypeGetter;
     private static readonly Action<ServiceDescriptor, object?> ImplementationFactorySetter;
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See DynamicDependency below")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ServiceDescriptor))]
     static ServiceDescriptorExt()
     {
         var bfInstanceNonPublic = BindingFlags.Instance | BindingFlags.NonPublic;

@@ -1,8 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using ActualLab.Fusion.Extensions;
 
 namespace ActualLab.Fusion.Server.Internal;
 
+[UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume server-side code is fully preserved")]
 public class PageRefModelBinder : IModelBinder
 {
     private static readonly MethodInfo ParseMethod = typeof(PageRef).GetMethod(nameof(PageRef.Parse))!;

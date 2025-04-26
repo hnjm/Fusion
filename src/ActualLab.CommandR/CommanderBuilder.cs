@@ -3,26 +3,44 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using ActualLab.CommandR.Diagnostics;
 using ActualLab.CommandR.Interception;
 using ActualLab.CommandR.Internal;
+using ActualLab.CommandR.Trimming;
 using ActualLab.Generators;
 using ActualLab.Interception;
+using ActualLab.Interception.Trimming;
 using ActualLab.Resilience;
+using ActualLab.Trimming;
 using ActualLab.Versioning;
 using ActualLab.Versioning.Providers;
 
 namespace ActualLab.CommandR;
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2062", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume all command handling code is preserved")]
 public readonly struct CommanderBuilder
 {
     public IServiceCollection Services { get; }
     public HashSet<CommandHandler> Handlers { get; }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Commander)]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Proxies))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CommandHandlerMethodDef))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(MethodCommandHandler<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(InterfaceCommandHandler<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CommandServiceInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CommandContext<>))]
+    static CommanderBuilder() => CodeKeeper.AddFakeAction(
+        static () => {
+            CodeKeeper.KeepStatic(typeof(Proxies));
+
+            // Configuration
+            CodeKeeper.Keep<CommandHandlerMethodDef>();
+            CodeKeeper.Keep<MethodCommandHandler<ICommand>>();
+            CodeKeeper.Keep<InterfaceCommandHandler<ICommand>>();
+
+            // Interceptors
+            CodeKeeper.Keep<CommanderProxyCodeKeeper>();
+            CodeKeeper.Keep<CommandServiceInterceptor>();
+
+            // Stuff that might be forgotten
+            var c = CodeKeeper.Get<ProxyCodeKeeper>();
+            c.KeepAsyncMethod<Unit, ICommand<Unit>, CancellationToken>();
+        });
+
     internal CommanderBuilder(
         IServiceCollection services,
         Action<CommanderBuilder>? configure)
@@ -81,6 +99,7 @@ public readonly struct CommanderBuilder
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         double? priorityOverride = null)
         => AddHandlers(serviceType, serviceType, priorityOverride);
+
     public CommanderBuilder AddHandlers(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
@@ -104,14 +123,10 @@ public readonly struct CommanderBuilder
                 continue;
 
             var method = implementationType.GetInterfaceMap(tInterface).TargetMethods.Single();
-#pragma warning disable IL2026
             var attr = MethodCommandHandler.GetAttribute(method);
-#pragma warning restore IL2026
             var isFilter = attr?.IsFilter ?? false;
             var order = priorityOverride ?? attr?.Priority ?? 0;
-#pragma warning disable IL2072
             AddHandler(InterfaceCommandHandler.New(serviceType, tCommand, isFilter, order));
-#pragma warning restore IL2072
             interfaceMethods.Add(method);
         }
 
@@ -134,15 +149,12 @@ public readonly struct CommanderBuilder
             if (!typeof(ICommand).IsAssignableFrom(parameters[0].ParameterType))
                 continue;
 
-#pragma warning disable IL2026
             var handler = MethodCommandHandler.TryNew(serviceType, method, priorityOverride);
-#pragma warning restore IL2026
             if (handler == null)
                 continue;
 
             AddHandler(handler);
         }
-
         return this;
     }
 
@@ -205,7 +217,6 @@ public readonly struct CommanderBuilder
         where TCommand : class, ICommand
         => AddHandler(InterfaceCommandHandler.New<TService, TCommand>(isFilter, priority));
 
-    [RequiresUnreferencedCode(UnreferencedCode.Commander)]
     public CommanderBuilder AddHandler(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         MethodInfo method,

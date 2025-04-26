@@ -14,9 +14,11 @@ using ActualLab.Fusion.Tests.Model;
 using ActualLab.Fusion.Tests.Services;
 using ActualLab.Fusion.Tests.UIModels;
 using ActualLab.Locking;
+using ActualLab.OS;
 using ActualLab.Rpc;
 using ActualLab.Testing.Collections;
 using ActualLab.Tests;
+using CommunityToolkit.HighPerformance;
 using User = ActualLab.Fusion.Tests.Model.User;
 
 namespace ActualLab.Fusion.Tests;
@@ -26,7 +28,11 @@ public abstract class FusionTestBase : RpcTestBase
 {
     private static readonly AsyncLock InitializeLock = new(LockReentryMode.CheckedFail);
 
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
     private readonly object _lock = new();
+#endif
     private IRemoteComputedCache? _remoteComputedCache;
 
     public FusionTestDbType DbType { get; set; } = TestRunnerInfo.IsBuildAgent()
@@ -40,6 +46,7 @@ public abstract class FusionTestBase : RpcTestBase
     public bool UseRemoteComputedCache { get; set; }
     public LogLevel RpcCallLogLevel { get; set; } = LogLevel.None;
 
+    public string RedisKeyPrefix { get; protected set; }
     public FilePath SqliteDbPath { get; protected set; }
     public string PostgreSqlConnectionString { get; protected set; } =
         "Server=localhost;Database=fusion_tests;Port=5432;User Id=postgres;Password=postgres;Enlist=false";
@@ -50,10 +57,15 @@ public abstract class FusionTestBase : RpcTestBase
 
     protected FusionTestBase(ITestOutputHelper @out) : base(@out)
     {
-        var appTempDir = TestRunnerInfo.IsGitHubAction()
-            ? new FilePath(Environment.GetEnvironmentVariable("RUNNER_TEMP"))
-            : FilePath.GetApplicationTempDirectory("", true);
-        SqliteDbPath = appTempDir & FilePath.GetHashedName($"{GetType().Name}_{GetType().Namespace}.db");
+        RedisKeyPrefix = GetTestRedisKeyPrefix(suffix: DotNetVersionHash);
+        SqliteDbPath = GetTestSqliteFilePath(suffix: DotNetVersionHash);
+        PostgreSqlConnectionString = FixConnectionString(PostgreSqlConnectionString);
+        MariaDbConnectionString = FixConnectionString(MariaDbConnectionString);
+        SqlServerConnectionString = FixConnectionString(SqlServerConnectionString);
+        return;
+
+        string FixConnectionString(string connectionString)
+            => GetTestDbConnectionString(connectionString, "fusion_tests", DotNetVersionHash);
     }
 
     public override async Task InitializeAsync()
@@ -102,6 +114,8 @@ public abstract class FusionTestBase : RpcTestBase
             fusion.AddService<IScreenshotService, ScreenshotService>();
             fusion.AddService<IEdgeCaseService, EdgeCaseService>();
             fusion.AddService<IKeyValueService<string>, KeyValueService<string>>();
+            fusion.AddService<EventQueue>();
+            fusion.AddService<EventCatcher>();
         } else {
             services.AddSingleton<RpcPeerFactory>(_ => (hub, peerRef)
                 => peerRef.IsServer
@@ -192,7 +206,7 @@ public abstract class FusionTestBase : RpcTestBase
             services.AddDbContextServices<TestDbContext>(db => {
                 var useRedis = UseOperationLogChangeTracking && UseRedisOperationLogChangeTracking;
                 if (useRedis)
-                    db.AddRedisDb("localhost", "Fusion.Tests");
+                    db.AddRedisDb("localhost", RedisKeyPrefix);
                 db.AddOperations(operations => {
                     if (!UseOperationLogChangeTracking)
                         return;

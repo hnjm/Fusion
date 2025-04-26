@@ -1,4 +1,3 @@
-using Cysharp.Text;
 using ActualLab.Interception;
 
 namespace ActualLab.Fusion.Interception;
@@ -26,7 +25,7 @@ public sealed class ComputeMethodInput : ComputedInput, IEquatable<ComputeMethod
     }
 
     public override string ToString()
-        => ZString.Concat(Category, Invocation.Arguments, "-Hash=", HashCode);
+        => string.Concat(Category, Invocation.Arguments.ToString(), "-Hash=", HashCode.ToString());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override ComputedOptions GetComputedOptions()
@@ -35,6 +34,25 @@ public sealed class ComputeMethodInput : ComputedInput, IEquatable<ComputeMethod
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override Computed? GetExistingComputed()
         => ComputedRegistry.Instance.Get(this);
+
+    internal ValueTask<object?> InvokeInterceptedUntyped(CancellationToken cancellationToken)
+    {
+        var ctIndex = MethodDef.CancellationTokenIndex;
+        ValueTask<object?> resultTask;
+
+        if (ctIndex < 0)
+            resultTask = MethodDef.InterceptedObjectAsyncInvoker.Invoke(Invocation);
+        else {
+            Invocation.Arguments.SetCancellationToken(ctIndex, cancellationToken);
+            try {
+                resultTask = MethodDef.InterceptedObjectAsyncInvoker.Invoke(Invocation);
+            }
+            finally {
+                Invocation.Arguments.SetCancellationToken(ctIndex, default); // Otherwise it may cause memory leak
+            }
+        }
+        return resultTask;
+    }
 
     // Equality
 

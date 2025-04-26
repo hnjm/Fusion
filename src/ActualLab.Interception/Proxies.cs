@@ -1,15 +1,50 @@
 using System.Diagnostics.CodeAnalysis;
-using Cysharp.Text;
 using ActualLab.Interception.Interceptors;
 using ActualLab.Interception.Internal;
+using ActualLab.OS;
+using ActualLab.Trimming;
 
 namespace ActualLab.Interception;
 
-#pragma warning disable IL2026, IL2055, IL2072
-
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume proxy-related code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2055", Justification = "We assume proxy-related code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume proxy-related code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume proxy-related code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume proxy-related code is preserved")]
 public static class Proxies
 {
-    private static readonly ConcurrentDictionary<Type, Type?> Cache = new();
+    internal static readonly ConcurrentDictionary<Type, Type?> Cache
+        = new(HardwareInfo.ProcessorCountPo2, 131);
+
+    static Proxies() => CodeKeeper.AddFakeAction(
+        static () => {
+            CodeKeeper.KeepStatic(typeof(ProxyHelper));
+
+            // ArgumentList
+            CodeKeeper.Keep<ArgumentListType>();
+            CodeKeeper.Keep<ArgumentList0>();
+            CodeKeeper.Keep<ArgumentListS1>();
+            CodeKeeper.Keep<ArgumentListS2>();
+            CodeKeeper.Keep<ArgumentListS3>();
+            CodeKeeper.Keep<ArgumentListS4>();
+            CodeKeeper.Keep<ArgumentListS5>();
+            CodeKeeper.Keep<ArgumentListS6>();
+            CodeKeeper.Keep<ArgumentListS7>();
+            CodeKeeper.Keep<ArgumentListS8>();
+            CodeKeeper.Keep<ArgumentListS9>();
+            CodeKeeper.Keep<ArgumentListS10>();
+
+            // Invocation, interceptor, proxies
+            CodeKeeper.Keep<MethodDef>();
+            CodeKeeper.Keep<Invocation>();
+            CodeKeeper.Keep<Interceptor>();
+            CodeKeeper.Keep<InterfaceProxy>();
+
+            // Build-in interceptors
+            CodeKeeper.Keep<TypeViewInterceptor>();
+            CodeKeeper.Keep<TypedFactoryInterceptor>();
+            CodeKeeper.Keep<SchedulingInterceptor>();
+        });
 
     public static IProxy New(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type baseType,
@@ -30,19 +65,6 @@ public static class Proxies
     public static Type GetProxyType(Type baseType)
         => TryGetProxyType(baseType) ?? throw Errors.NoProxyType(baseType);
 
-#if NET5_0_OR_GREATER
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(InterfaceProxy))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ProxyHelper))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Interceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Interceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(TypeViewInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(TypedFactoryInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(MethodDef))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Invocation))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ArgumentList))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Result<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ResultBox<>))]
-#endif
     public static Type? TryGetProxyType(Type baseType)
         => Cache.GetOrAdd(baseType, static type => {
             if (type.IsConstructedGenericType) {
@@ -61,7 +83,7 @@ public static class Proxies
                 namePrefix = name[..backTrickIndex];
                 nameSuffix = name[backTrickIndex..];
             }
-            var proxyTypeName = ZString.Concat(
+            var proxyTypeName = string.Concat(
                 type.Namespace,
                 type.Namespace.IsNullOrEmpty() ? "" : ".",
                 "ActualLabProxies.",

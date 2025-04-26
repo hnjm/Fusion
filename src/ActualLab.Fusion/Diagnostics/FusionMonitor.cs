@@ -1,16 +1,20 @@
 using System.Globalization;
 using System.Text;
-using Cysharp.Text;
 
 namespace ActualLab.Fusion.Diagnostics;
 
 public sealed class FusionMonitor : WorkerBase
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
+    private readonly object _lock = new();
+#endif
+
     // Cached delegates
     private readonly Action<Computed, bool> _onAccess;
     private readonly Action<Computed> _onRegister;
     private readonly Action<Computed> _onUnregister;
-    private readonly object _lock = new();
 
     // Stats
     private Dictionary<string, (int, int)> _accesses = null!;
@@ -179,6 +183,6 @@ public sealed class FusionMonitor : WorkerBase
 
         if (RegistrationLogSampler.Next())
             // ReSharper disable once TemplateIsNotCompileTimeConstantProblem
-            Log.LogDebug(ZString.Concat(isRegistration ? "+ " : "- ", input));
+            Log.LogDebug((isRegistration ? "+ " : "- ") + input);
     }
 }

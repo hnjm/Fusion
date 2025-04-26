@@ -1,14 +1,16 @@
+using MessagePack;
+
 namespace ActualLab.Collections.Internal;
 
 #pragma warning disable CA1036 // Implement <, <=, etc.
 
 [StructLayout(LayoutKind.Auto)]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
-[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
+[method: JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
 public partial record struct PropertyBagItem(
-    [property: DataMember(Order = 0), MemoryPackOrder(0)] Symbol Key,
-    [property: DataMember(Order = 1), MemoryPackOrder(1)] TypeDecoratingUniSerialized<object> Serialized
+    [property: DataMember(Order = 0), MemoryPackOrder(0), StringAsSymbolMemoryPackFormatter, Key(0)] string Key,
+    [property: DataMember(Order = 1), MemoryPackOrder(1), Key(1)] TypeDecoratingUniSerialized<object> Serialized
     ) : IComparable<PropertyBagItem>
 {
     public static readonly IComparer<PropertyBagItem> Comparer = new ComparerImpl();
@@ -18,17 +20,21 @@ public partial record struct PropertyBagItem(
 
     // Constructor-like methods
 
-    public static PropertyBagItem NewKey(Symbol key)
+    public static PropertyBagItem NewKey(string key)
     {
-        if (key.IsEmpty)
+        if (key.IsNullOrEmpty())
             throw new ArgumentOutOfRangeException(nameof(key));
 
         return new PropertyBagItem(key, default);
     }
 
-    public static PropertyBagItem New(Symbol key, object? value)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static PropertyBagItem NewKey(Type key)
+        => new(key.ToIdentifierSymbol(), default);
+
+    public static PropertyBagItem New(string key, object? value)
     {
-        if (key.IsEmpty)
+        if (key.IsNullOrEmpty())
             throw new ArgumentOutOfRangeException(nameof(key));
         if (ReferenceEquals(value, null))
             throw new ArgumentOutOfRangeException(nameof(value));
@@ -36,38 +42,46 @@ public partial record struct PropertyBagItem(
         return new PropertyBagItem(key, TypeDecoratingUniSerialized.New(value));
     }
 
+    public static PropertyBagItem New(Type key, object? value)
+    {
+        if (ReferenceEquals(value, null))
+            throw new ArgumentOutOfRangeException(nameof(value));
+
+        return new PropertyBagItem(key.ToIdentifierSymbol(), TypeDecoratingUniSerialized.New(value));
+    }
+
     public static PropertyBagItem New<T>(object value)
     {
         if (ReferenceEquals(value, null))
             throw new ArgumentOutOfRangeException(nameof(value));
 
-        return new PropertyBagItem(typeof(T), TypeDecoratingUniSerialized.New(value));
+        return new PropertyBagItem(typeof(T).ToIdentifierSymbol(), TypeDecoratingUniSerialized.New(value));
     }
 
     public override string ToString()
         => $"({Key}, {Value})";
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static implicit operator PropertyBagItem((Symbol key, object value) source)
+    public static implicit operator PropertyBagItem((string key, object value) source)
         => New(source.key, source.value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator PropertyBagItem((Type key, object value) source)
-        => New(source.key, source.value);
+        => New(source.key.ToIdentifierSymbol(), source.value);
 
     // Equality - relies only on Key property
     public readonly bool Equals(PropertyBagItem other) => Key.Equals(other.Key);
-    public override readonly int GetHashCode() => Key.GetHashCode();
+    public override readonly int GetHashCode() => Key.GetOrdinalHashCode();
 
     // CompareTo
     public int CompareTo(PropertyBagItem other)
-        => string.CompareOrdinal(Key.Value, other.Key.Value);
+        => string.CompareOrdinal(Key, other.Key);
 
     // Nested types
 
     private sealed class ComparerImpl : IComparer<PropertyBagItem>
     {
         public int Compare(PropertyBagItem x, PropertyBagItem y)
-            => string.CompareOrdinal(x.Key.Value, y.Key.Value);
+            => string.CompareOrdinal(x.Key, y.Key);
     }
 }

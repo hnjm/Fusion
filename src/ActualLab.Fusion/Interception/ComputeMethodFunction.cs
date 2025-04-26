@@ -3,51 +3,56 @@ using ActualLab.Interception;
 
 namespace ActualLab.Fusion.Interception;
 
-public interface IComputeMethodFunction : IComputeFunction
+public sealed class ComputeMethodFunction<T>(FusionHub hub, ComputeMethodDef methodDef)
+    : ComputeMethodFunction(hub, methodDef)
 {
-    ComputeMethodDef MethodDef { get; }
-    ComputedOptions ComputedOptions { get; }
+    protected override Computed NewComputed(ComputeMethodInput input)
+        => new ComputeMethodComputed<T>(ComputedOptions, input);
 }
 
-public class ComputeMethodFunction<T>(
-    ComputeMethodDef methodDef,
-    FusionHub hub
-    ) : ComputeFunctionBase<T>(hub), IComputeMethodFunction
+public abstract class ComputeMethodFunction(FusionHub hub, ComputeMethodDef methodDef)
+    : ComputeFunction(hub, methodDef.UnwrappedReturnType)
 {
-    ComputeMethodDef IComputeMethodFunction.MethodDef => MethodDef;
-    ComputedOptions IComputeMethodFunction.ComputedOptions => ComputedOptions;
-
     public readonly ComputeMethodDef MethodDef = methodDef;
     public readonly ComputedOptions ComputedOptions = methodDef.ComputedOptions;
+    public readonly int CancellationTokenIndex = methodDef.CancellationTokenIndex;
 
     public override string ToString()
         => MethodDef.FullName;
 
-    protected override async ValueTask<Computed<T>> Compute(
-        ComputedInput input, Computed<T>? existing,
-        CancellationToken cancellationToken)
+    public object? ComputeServiceInterceptorHandler(Invocation invocation)
+    {
+        var input = new ComputeMethodInput(this, MethodDef, invocation);
+        var cancellationToken = invocation.Arguments.GetCancellationToken(CancellationTokenIndex); // Auto-handles -1 index
+        try {
+            var task = input.GetOrProduceValuePromise(ComputeContext.Current, cancellationToken);
+            return MethodDef.WrapAsyncInvokerResultOfAsyncMethodUntyped(task);
+        }
+        finally {
+            if (cancellationToken.CanBeCanceled)
+                // ComputedInput is stored in ComputeRegistry, so we remove CancellationToken there
+                // to prevent memory leaks + possible unexpected cancellations on .Update calls.
+                invocation.Arguments.SetCancellationToken(CancellationTokenIndex, default);
+        }
+    }
+
+    protected override async ValueTask<Computed> ProduceComputedImpl(
+        ComputedInput input, Computed? existing, CancellationToken cancellationToken)
     {
         var typedInput = (ComputeMethodInput)input;
         var tryIndex = 0;
         var startedAt = CpuTimestamp.Now;
         while (true) {
-            var computed = new ComputeMethodComputed<T>(ComputedOptions, typedInput);
+            var computed = NewComputed(typedInput);
             try {
                 using var _ = Computed.BeginCompute(computed);
-                var result = InvokeIntercepted(typedInput, cancellationToken);
-                if (typedInput.MethodDef.ReturnsValueTask) {
-                    var output = await ((ValueTask<T>)result).ConfigureAwait(false);
-                    computed.TrySetOutput(output);
-                }
-                else {
-                    var output = await ((Task<T>)result).ConfigureAwait(false);
-                    computed.TrySetOutput(output);
-                }
+                var result = await typedInput.InvokeInterceptedUntyped(cancellationToken).ConfigureAwait(false);
+                computed.TrySetValue(result);
                 return computed;
             }
             catch (Exception e) {
                 var delayTask = ComputedImpl.FinalizeAndTryReprocessInternalCancellation(
-                    nameof(Compute), computed, e, startedAt, ref tryIndex, Log, cancellationToken);
+                    nameof(ProduceComputedImpl), computed, e, startedAt, ref tryIndex, Log, cancellationToken);
                 if (delayTask == SpecialTasks.MustThrow)
                     throw;
                 if (delayTask == SpecialTasks.MustReturn)
@@ -57,21 +62,5 @@ public class ComputeMethodFunction<T>(
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    protected static object InvokeIntercepted(ComputeMethodInput input, CancellationToken cancellationToken)
-    {
-        var ctIndex = input.MethodDef.CancellationTokenIndex;
-        var invocation = input.Invocation;
-        if (ctIndex < 0)
-            return invocation.InvokeInterceptedUntyped()!;
-
-        var arguments = invocation.Arguments;
-        arguments.SetCancellationToken(ctIndex, cancellationToken);
-        try {
-            return invocation.InvokeInterceptedUntyped()!;
-        }
-        finally {
-            arguments.SetCancellationToken(ctIndex, default); // Otherwise it may cause memory leak
-        }
-    }
+    protected abstract Computed NewComputed(ComputeMethodInput input);
 }

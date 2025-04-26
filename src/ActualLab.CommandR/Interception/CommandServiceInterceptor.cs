@@ -1,24 +1,26 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.CommandR.Internal;
 using ActualLab.Interception;
+using ActualLab.OS;
 using ActualLab.Rpc.Infrastructure;
 
 namespace ActualLab.CommandR.Interception;
 
-#if !NET5_0
-[RequiresUnreferencedCode(UnreferencedCode.Commander)]
-#endif
 public sealed class CommandServiceInterceptor(CommandServiceInterceptor.Options settings, IServiceProvider services)
     : Interceptor(settings, services)
 {
     public new record Options : Interceptor.Options
     {
-        public static Options Default { get; set; } = new();
+        public static Options Default { get; set; } = new() {
+            // This interceptor is shared, so we adjust its cache concurrency settings
+            HandlerCacheConcurrencyLevel = HardwareInfo.GetProcessorCountPo2Factor(2),
+            HandlerCacheCapacity = 131,
+        };
     }
 
     public readonly ICommander Commander = services.Commander();
 
-    protected override Func<Invocation, object?>? CreateHandler<
+    protected override Func<Invocation, object?>? CreateTypedHandler<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TUnwrapped>
         (Invocation initialInvocation, MethodDef methodDef)
         => invocation => {
@@ -69,13 +71,13 @@ public sealed class CommandServiceInterceptor(CommandServiceInterceptor.Options 
         };
 
     // We don't need to decorate this method with any dynamic access attributes
-    protected override MethodDef? CreateMethodDef(MethodInfo method, Type proxyType)
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume all command handling code is preserved")]
+    protected override MethodDef? CreateMethodDef(MethodInfo method,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type proxyType)
     {
         try {
             var type = proxyType.NonProxyType();
-#pragma warning disable IL2072
             var methodDef = new CommandHandlerMethodDef(type, method);
-#pragma warning restore IL2072
             return methodDef.IsValid ? methodDef : null;
         }
         catch {
@@ -85,6 +87,7 @@ public sealed class CommandServiceInterceptor(CommandServiceInterceptor.Options 
         }
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume all command handling code is preserved")]
     protected override void ValidateTypeInternal(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type)
     {
@@ -98,9 +101,7 @@ public sealed class CommandServiceInterceptor(CommandServiceInterceptor.Options 
         foreach (var method in methods) {
             if (method.DeclaringType == typeof(object))
                 continue;
-#pragma warning disable IL2026
             var attr = MethodCommandHandler.GetAttribute(method);
-#pragma warning restore IL2026
             if (attr == null)
                 continue;
 

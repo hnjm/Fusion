@@ -129,7 +129,7 @@ public class FusionRpcReconnectionTest(ITestOutputHelper @out) : SimpleFusionTes
         var c2 = await Computed.Capture(() => client.GetTime());
         c2.Should().BeSameAs(c1);
         c2.Invalidate();
-        var c2a = await c2.Update();
+        var c2a = await c2.UpdateUntyped();
         c2a.Value.Should().Be(c1.Value);
     }
 
@@ -188,7 +188,7 @@ public class FusionRpcReconnectionTest(ITestOutputHelper @out) : SimpleFusionTes
 
         var timeout = TimeSpan.FromSeconds(10);
         var disruptorCts = new CancellationTokenSource();
-        var disruptorTask = Task.Run(() => ConnectionDisruptor(disruptorCts.Token));
+        var disruptorTask = Task.Run(() => ConnectionDisruptor(disruptorCts.Token), disruptorCts.Token);
         try {
             var rnd = new Random();
             var callCount = 0L;
@@ -208,7 +208,7 @@ public class FusionRpcReconnectionTest(ITestOutputHelper @out) : SimpleFusionTes
             disruptorCts.CancelAndDisposeSilently();
             await disruptorTask.WaitAsync(timeout).SuppressCancellationAwait();
             await connection.Connect().WaitAsync(timeout);
-            await Delay(0.2); // Enough for invalidations to come through
+            await Delay(0.5); // Enough for invalidations to come through
 
             await AssertNoCalls(connection.ClientPeer, Out);
             await AssertNoCalls(connection.ServerPeer, Out);

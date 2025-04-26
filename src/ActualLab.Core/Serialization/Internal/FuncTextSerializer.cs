@@ -1,12 +1,12 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using Cysharp.Text;
-using ActualLab.Internal;
 
 namespace ActualLab.Serialization.Internal;
 
-public class FuncTextSerializer<T>(Func<string, T> reader, Func<T, string> writer) : ITextSerializer<T>
+public class FuncTextSerializer<T>(
+    Func<string, T> reader,
+    Func<T, string> writer
+    ) : ITextSerializer<T>
 {
     public bool PreferStringApi => true;
     public Func<string, T> Reader { get; } = reader;
@@ -14,14 +14,12 @@ public class FuncTextSerializer<T>(Func<string, T> reader, Func<T, string> write
 
     // Read
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public T Read(string data)
         => Reader.Invoke(data);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public T Read(ReadOnlyMemory<byte> data, out int readLength)
     {
-        var decoder = Encoding.UTF8.GetDecoder();
+        var decoder = EncodingExt.Utf8NoBom.GetDecoder();
         var buffer = ZString.CreateStringBuilder();
         try {
             decoder.Convert(data.Span, ref buffer);
@@ -33,7 +31,6 @@ public class FuncTextSerializer<T>(Func<string, T> reader, Func<T, string> write
         }
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public T Read(ReadOnlyMemory<char> data)
     {
 #if NETSTANDARD2_0
@@ -45,19 +42,16 @@ public class FuncTextSerializer<T>(Func<string, T> reader, Func<T, string> write
 
     // Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public string Write(T value)
         => Writer.Invoke(value);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void Write(IBufferWriter<byte> bufferWriter, T value)
     {
         var result = Writer.Invoke(value);
-        var encoder = Encoding.UTF8.GetEncoder();
+        var encoder = EncodingExt.Utf8NoBom.GetEncoder();
         encoder.Convert(result.AsSpan(), bufferWriter);
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public void Write(TextWriter textWriter, T value)
     {
         var result = Writer.Invoke(value);

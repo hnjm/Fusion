@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks Condition="$(UseMultitargeting)">net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;netstandard2.1;netstandard2.0</TargetFrameworks>
-    <TargetFramework Condition="!$(UseMultitargeting)">net8.0</TargetFramework>
+    <TargetFrameworks Condition="$(UseMultitargeting)">net9.0;net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;netstandard2.1;netstandard2.0</TargetFrameworks>
     <PackageTags>actual_chat actual_lab actual_lab_fusion redis</PackageTags>
     <Description>ActualLab.Redis - a set of helpers related to Redis.</Description>
     <IsServerSideOnly>true</IsServerSideOnly>
@@ -13,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="!$(TargetFramework.StartsWith('netstandard2.0'))">
-    <PackageReference Include="MemoryPack.Generator" />
+    <PackageReference Include="MemoryPack.Generator" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

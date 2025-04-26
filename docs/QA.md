@@ -4,10 +4,10 @@
 
 > Q: What's the best place to ask questions related to Fusion?
 
-[Discord Server] is currently the best place to ask questions and
+[Fusion Place] is currently the best place to ask questions and
 track project updates.
 
-[![Discord Server](https://img.shields.io/discord/729970863419424788.svg)](https://discord.gg/EKEwv6d) 
+[![Fusion Place](https://img.shields.io/badge/Fusion%20%40%20Actual%20Chat-BE145B)](https://actual.chat/chat/s-1KCdcYy9z2-uJVPKZsbEo)
 
 > Q: Can I contribute to the project?
 
@@ -30,7 +30,7 @@ Yes, you can use it to implement the same real-time update logic there.
 The only difference here is that you don't need API controllers supporting
 Fusion publication in this case, i.e. your models might depend right on the 
 *server-side compute services* (that's an abstraction you primarily deal with, 
-that "hides" all the complexities of dealing with `IComputed` 
+that "hides" all the complexities of dealing with `Computed<T>` 
 and does it transparently for you).
 
 > Q: Can I use Fusion *without* Blazor at all?
@@ -46,7 +46,7 @@ you still need a counterpart in Blazor that e.g. exports the "live state"
 maintained by Fusion to the JavaScript part of the app after every update.
 
 There is a good chance we (or someone else) will develop a native 
-JavaScript client for Fusion in future.
+JavaScript client for Fusion in the future.
 
 > Q: Are there any benefits of using Fusion on server-side only?
 
@@ -61,8 +61,6 @@ nearly real-time invalidation / minimum % of inconsistent reads.
 
 TBD.
 
-[Fusion Discord Server]: https://discord.gg/EKEwv6d
 [Fusion Samples]: https://github.com/ActualLab/Fusion.Samples
-
-[Discord Server]: https://discord.gg/EKEwv6d
+[Fusion Place]: https://actual.chat/chat/s-1KCdcYy9z2-uJVPKZsbEo
 [Fusion Feedback Form]: https://forms.gle/TpGkmTZttukhDMRB6

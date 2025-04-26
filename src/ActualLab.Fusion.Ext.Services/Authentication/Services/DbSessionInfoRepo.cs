@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using ActualLab.Fusion.EntityFramework;
 
@@ -8,26 +9,28 @@ public interface IDbSessionInfoRepo<in TDbContext, TDbSessionInfo, in TDbUserId>
     where TDbSessionInfo : DbSessionInfo<TDbUserId>, new()
     where TDbUserId : notnull
 {
-    Type SessionInfoEntityType { get; }
+    public Type SessionInfoEntityType { get; }
 
     // Write methods
-    Task<TDbSessionInfo> GetOrCreate(
+    public Task<TDbSessionInfo> GetOrCreate(
         TDbContext dbContext, string sessionId, CancellationToken cancellationToken = default);
-    Task<TDbSessionInfo> Upsert(
+    public Task<TDbSessionInfo> Upsert(
         TDbContext dbContext, string sessionId, SessionInfo sessionInfo, CancellationToken cancellationToken = default);
-    Task<int> Trim(
-        DbShard shard, DateTime maxLastSeenAt, int maxCount, CancellationToken cancellationToken = default);
+    public Task<int> Trim(
+        string shard, DateTime maxLastSeenAt, int maxCount, CancellationToken cancellationToken = default);
 
     // Read methods
-    Task<TDbSessionInfo?> Get(
-        DbShard shard, string sessionId, CancellationToken cancellationToken = default);
-    Task<TDbSessionInfo?> Get(
+    public Task<TDbSessionInfo?> Get(
+        string shard, string sessionId, CancellationToken cancellationToken = default);
+    public Task<TDbSessionInfo?> Get(
         TDbContext dbContext, string sessionId, bool forUpdate, CancellationToken cancellationToken = default);
-    Task<TDbSessionInfo[]> ListByUser(
+    public Task<TDbSessionInfo[]> ListByUser(
         TDbContext dbContext, TDbUserId userId, CancellationToken cancellationToken = default);
 }
 
-public class DbSessionInfoRepo<TDbContext, TDbSessionInfo, TDbUserId>(
+public class DbSessionInfoRepo<TDbContext,
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TDbSessionInfo,
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TDbUserId>(
     DbAuthService<TDbContext>.Options settings,
     IServiceProvider services
     ) : DbServiceBase<TDbContext>(services), IDbSessionInfoRepo<TDbContext, TDbSessionInfo, TDbUserId>
@@ -88,7 +91,7 @@ public class DbSessionInfoRepo<TDbContext, TDbSessionInfo, TDbUserId>(
     }
 
     public virtual async Task<int> Trim(
-        DbShard shard, DateTime maxLastSeenAt, int maxCount, CancellationToken cancellationToken = default)
+        string shard, DateTime maxLastSeenAt, int maxCount, CancellationToken cancellationToken = default)
     {
         var dbContext = await DbHub.CreateDbContext(shard, true, cancellationToken).ConfigureAwait(false);
         await using var _1 = dbContext.ConfigureAwait(false);
@@ -122,7 +125,7 @@ public class DbSessionInfoRepo<TDbContext, TDbSessionInfo, TDbUserId>(
 
     // Read methods
 
-    public async Task<TDbSessionInfo?> Get(DbShard shard, string sessionId, CancellationToken cancellationToken = default)
+    public async Task<TDbSessionInfo?> Get(string shard, string sessionId, CancellationToken cancellationToken = default)
         => await SessionResolver.Get(shard, sessionId, cancellationToken).ConfigureAwait(false);
 
     public virtual async Task<TDbSessionInfo?> Get(

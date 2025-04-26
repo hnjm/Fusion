@@ -1,54 +1,51 @@
+using System.Diagnostics.CodeAnalysis;
+using ActualLab.Conversion;
 using ActualLab.Fusion.Internal;
 using Errors = ActualLab.Internal.Errors;
 
 namespace ActualLab.Fusion;
 
-public interface IMutableState : IState, IMutableResult
-{
-    public new interface IOptions : IState.IOptions;
-}
+// Interfaces
 
+public interface IMutableStateOptions : IStateOptions;
+public interface IMutableState : IState, IMutableResult;
 public interface IMutableState<T> : IState<T>, IMutableResult<T>, IMutableState;
 
-public class MutableState<T> : State<T>, IMutableState<T>
+// Classes
+
+public abstract class MutableState : State, IMutableState
 {
-    public new record Options : State<T>.Options, IMutableState.IOptions
-    {
-        public Options()
-            => ComputedOptions = ComputedOptions.MutableStateDefault;
-    }
+    protected Result NextOutput;
 
-    protected Result<T> NextOutput;
-
-    public new T Value {
+    public new object? Value {
         get => base.Value;
-        set => Set(Result.Value(value));
+        set => Set(Result.NewUntyped(value));
     }
+
     public new Exception? Error {
         get => base.Error;
-        set => Set(Result.Error<T>(value!));
-    }
-    object? IMutableResult.UntypedValue {
-        // ReSharper disable once HeapView.PossibleBoxingAllocation
-        get => Value;
-        set => Set(Result.Value((T) value!));
+        [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume all used constructors are preserved")]
+        set {
+            var result = value == null
+                ? Result.NewUntyped(OutputType.GetDefaultValue(), null)
+                : Result.NewUntypedError(value!);
+            Set(result);
+        }
     }
 
-    public MutableState(Options settings, IServiceProvider services, bool initialize = true)
-        : base(settings, services, false)
+    protected MutableState(IMutableStateOptions options, IServiceProvider services, bool initialize = true)
+        : base(options, services, false)
     {
-        NextOutput = settings.InitialOutput;
+        NextOutput = options.InitialOutput;
 
         // ReSharper disable once VirtualMemberCallInConstructor
         if (initialize)
-            Initialize(settings);
+            Initialize(options);
     }
 
     // Set overloads
 
-    void IMutableResult.Set(IResult result)
-        => Set(result.Cast<T>());
-    public void Set(Result<T> result)
+    public void Set(Result result)
     {
         lock (Lock) {
             if (NextOutput == result)
@@ -57,7 +54,7 @@ public class MutableState<T> : State<T>, IMutableState<T>
             var snapshot = Snapshot;
             NextOutput = result;
             // We do this inside the lock by a few reasons:
-            // 1. Otherwise the lock will be acquired twice -
+            // 1. Otherwise, the lock will be acquired twice -
             //    see OnInvalidated & Invoke overloads below.
             // 2. It's quite convenient if Set, while being
             //    non-async, synchronously updates the mutable
@@ -69,21 +66,89 @@ public class MutableState<T> : State<T>, IMutableState<T>
         }
     }
 
+    // Protected methods
+
+    protected internal override void OnInvalidated(Computed computed)
+    {
+        base.OnInvalidated(computed);
+
+        if (Snapshot.Computed != computed)
+            return;
+
+        var updateTask = computed.UpdateUntyped();
+        if (!updateTask.IsCompleted)
+            throw Errors.InternalError("Update() task must complete synchronously here.");
+    }
+
+    protected override Task<Computed> ProduceComputed(ComputeContext context, CancellationToken cancellationToken = default)
+    {
+        // The same logic as in base method, but relying on lock instead of AsyncLock
+        lock (Lock) {
+            var computed = UntypedComputed;
+            if (ComputedImpl.TryUseExistingFromLock(computed, context))
+                return Task.FromResult(computed);
+
+            OnUpdating(computed);
+            computed = CreateComputed();
+            ComputedImpl.UseNew(computed, context);
+            return Task.FromResult(computed);
+        }
+    }
+
+    protected override Task Compute(CancellationToken cancellationToken)
+        => throw Errors.InternalError("This method should never be called.");
+}
+
+public class MutableState<T> : MutableState, IMutableState<T>
+{
+    public record Options : StateOptions<T>, IMutableStateOptions
+    {
+        public Options()
+            => ComputedOptions = ComputedOptions.MutableStateDefault;
+    }
+
+    public override Type OutputType => typeof(T);
+
+    // IState<T> implementation
+    public new Computed<T> Computed {
+        get => (Computed<T>)UntypedComputed;
+        protected set => UntypedComputed = value;
+    }
+
+    public T? ValueOrDefault => Computed.ValueOrDefault;
+    public new T LastNonErrorValue => ((Computed<T>)Snapshot.LastNonErrorComputed).Value;
+
+    public new T Value {
+        get => Computed.Value;
+        set => Set(Result.NewUntyped(value));
+    }
+
+    // ReSharper disable once ConvertToPrimaryConstructor
+    public MutableState(Options options, IServiceProvider services, bool initialize = true)
+        : base(options, services, initialize)
+    { }
+
+    // IResult<T> implementation
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Deconstruct(out T value, out Exception? error)
+        => Computed.Deconstruct(out value, out error);
+    T IConvertibleTo<T>.Convert() => Value;
+
+    public void Set(Result<T> result)
+        => Set(result.ToUntypedResult());
+
     public void Set(Func<Result<T>, Result<T>> updater, bool throwOnError = false)
     {
         lock (Lock) {
             var snapshot = Snapshot;
-            T result;
+            Result<T> result;
             try {
-                result = updater.Invoke(snapshot.Computed.Output);
+                result = updater.Invoke(((Computed<T>)snapshot.Computed).Output);
             }
-            catch (Exception e) {
-                if (throwOnError)
-                    throw;
-
-                result = Result.Error<T>(e);
+            catch (Exception e) when (!throwOnError) {
+                result = Result.NewError<T>(e);
             }
-            NextOutput = result;
+            NextOutput = result.ToUntypedResult();
             snapshot.Computed.Invalidate();
         }
     }
@@ -92,85 +157,25 @@ public class MutableState<T> : State<T>, IMutableState<T>
     {
         lock (Lock) {
             var snapshot = Snapshot;
-            T result;
+            Result<T> result;
             try {
-                result = updater.Invoke(state, snapshot.Computed.Output);
+                result = updater.Invoke(state, ((Computed<T>)snapshot.Computed).Output);
             }
-            catch (Exception e) {
-                if (throwOnError)
-                    throw;
-
-                result = Result.Error<T>(e);
+            catch (Exception e) when (!throwOnError) {
+                result = Result.NewError<T>(e);
             }
-            NextOutput = result;
+            NextOutput = result.ToUntypedResult();
             snapshot.Computed.Invalidate();
         }
     }
 
     // Protected methods
 
-    protected internal override void OnInvalidated(Computed<T> computed)
+    protected override Computed CreateComputed()
     {
-        base.OnInvalidated(computed);
-
-        if (Snapshot.Computed != computed)
-            return;
-
-        var updateTask = computed.Update();
-        if (!updateTask.IsCompleted)
-            throw Errors.InternalError("Update() task must complete synchronously here.");
-    }
-
-    protected override ValueTask<Computed<T>> Invoke(
-        ComputeContext context,
-        CancellationToken cancellationToken)
-    {
-        var computed = Computed;
-        if (ComputedImpl.TryUseExisting(computed, context))
-            return ValueTaskExt.FromResult(computed);
-
-        // Double-check locking
-        lock (Lock) {
-            computed = Computed;
-            if (ComputedImpl.TryUseExistingFromLock(computed, context))
-                return ValueTaskExt.FromResult(computed);
-
-            OnUpdating(computed);
-            computed = CreateComputed();
-            ComputedImpl.UseNew(computed, context);
-            return ValueTaskExt.FromResult(computed);
-        }
-    }
-
-    protected override Task<T> InvokeAndStrip(
-        ComputeContext context,
-        CancellationToken cancellationToken)
-    {
-        var computed = Computed;
-        if (ComputedImpl.TryUseExisting(computed, context))
-            return ComputedImpl.StripToTask(computed, context);
-
-        // Double-check locking
-        lock (Lock) {
-            computed = Computed;
-            if (ComputedImpl.TryUseExistingFromLock(computed, context))
-                return ComputedImpl.StripToTask(computed, context);
-
-            OnUpdating(computed);
-            computed = CreateComputed();
-            ComputedImpl.UseNew(computed, context);
-            return ComputedImpl.StripToTask(computed, context);
-        }
-    }
-
-    protected override StateBoundComputed<T> CreateComputed()
-    {
-        var computed = base.CreateComputed();
+        var computed = new StateBoundComputed<T>(ComputedOptions, this);
         computed.TrySetOutput(NextOutput);
-        Computed = computed;
+        UntypedComputed = computed;
         return computed;
     }
-
-    protected override Task<T> Compute(CancellationToken cancellationToken)
-        => throw Errors.InternalError("This method should never be called.");
 }

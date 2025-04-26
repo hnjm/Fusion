@@ -48,7 +48,7 @@ public partial class DbAuthService<TDbContext, TDbSessionInfo, TDbUser, TDbUserI
             _ = GetAuthInfo(session, default);
             if (force)
                 _ = IsSignOutForced(session, default);
-            var invSessionInfo = context.Operation.Items.Get<SessionInfo>();
+            var invSessionInfo = context.Operation.Items.KeylessGet<SessionInfo>();
             if (invSessionInfo != null) {
                 _ = GetUser(shard, invSessionInfo.UserId, default);
                 _ = GetUserSessions(shard, invSessionInfo.UserId, default);
@@ -74,7 +74,7 @@ public partial class DbAuthService<TDbContext, TDbSessionInfo, TDbUser, TDbUserI
             return;
         }
 
-        var dbContext = await DbHub.CreateCommandDbContext(shard, cancellationToken).ConfigureAwait(false);
+        var dbContext = await DbHub.CreateOperationDbContext(shard, cancellationToken).ConfigureAwait(false);
         await using var _1 = dbContext.ConfigureAwait(false);
 
         var dbSessionInfo = await Sessions.GetOrCreate(dbContext, session.Id, cancellationToken).ConfigureAwait(false);
@@ -82,11 +82,11 @@ public partial class DbAuthService<TDbContext, TDbSessionInfo, TDbUser, TDbUserI
         if (sessionInfo == null! || sessionInfo.IsSignOutForced)
             return;
 
-        context.Operation.Items.Set(sessionInfo);
+        context.Operation.Items.KeylessSet(sessionInfo);
         sessionInfo = sessionInfo with {
             LastSeenAt = Clocks.SystemClock.Now,
             AuthenticatedIdentity = "",
-            UserId = Symbol.Empty,
+            UserId = "",
             IsSignOutForced = force,
         };
         await Sessions.Upsert(dbContext, session.Id, sessionInfo, cancellationToken).ConfigureAwait(false);
@@ -100,7 +100,7 @@ public partial class DbAuthService<TDbContext, TDbSessionInfo, TDbUser, TDbUserI
         var context = CommandContext.GetCurrent();
         var shard = ShardResolver.Resolve(command);
         if (Invalidation.IsActive) {
-            var invSessionInfo = context.Operation.Items.Get<SessionInfo>();
+            var invSessionInfo = context.Operation.Items.KeylessGet<SessionInfo>();
             if (invSessionInfo != null)
                 _ = GetUser(shard, invSessionInfo.UserId, default);
             return;
@@ -110,7 +110,7 @@ public partial class DbAuthService<TDbContext, TDbSessionInfo, TDbUser, TDbUserI
             .Require(SessionInfo.MustBeAuthenticated)
             .ConfigureAwait(false);
 
-        var dbContext = await DbHub.CreateCommandDbContext(shard, cancellationToken).ConfigureAwait(false);
+        var dbContext = await DbHub.CreateOperationDbContext(shard, cancellationToken).ConfigureAwait(false);
         await using var _1 = dbContext.ConfigureAwait(false);
 
         var dbUserId = UserIdHandler.Parse(sessionInfo.UserId, false);
@@ -119,7 +119,7 @@ public partial class DbAuthService<TDbContext, TDbSessionInfo, TDbUser, TDbUserI
             throw EntityFramework.Internal.Errors.EntityNotFound(Users.UserEntityType);
 
         await Users.Edit(dbContext, dbUser, command, cancellationToken).ConfigureAwait(false);
-        context.Operation.Items.Set(sessionInfo);
+        context.Operation.Items.KeylessSet(sessionInfo);
     }
 
     public override async Task UpdatePresence(

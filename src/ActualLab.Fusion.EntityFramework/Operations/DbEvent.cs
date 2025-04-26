@@ -7,33 +7,26 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ActualLab.Fusion.EntityFramework.Operations;
 
-#pragma warning disable IL2026
-
 [Table("_Events")]
-[Index(nameof(Uuid), IsUnique = true)] // "Uuid -> Index" queries
 [Index(nameof(State), nameof(DelayUntil))] // "!IsProcessed & DelayUntil < now" queries
 [Index(nameof(DelayUntil))] // "DelayUntil < trimAt" queries
 public sealed class DbEvent : IDbEventLogEntry
 {
     public static ITextSerializer Serializer { get; set; } = NewtonsoftJsonSerializer.Default;
 
-    private DateTime _loggedAt;
-    private DateTime _delayUntil;
-
-    [Key, DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-    public string Uuid { get; set; } = "";
+    [Key] public string Uuid { get; set; } = "";
 
     [ConcurrencyCheck]
     public long Version { get; set; }
 
     public DateTime LoggedAt {
-        get => _loggedAt.DefaultKind(DateTimeKind.Utc);
-        set => _loggedAt = value.DefaultKind(DateTimeKind.Utc);
+        get => field.DefaultKind(DateTimeKind.Utc);
+        set => field = value.DefaultKind(DateTimeKind.Utc);
     }
 
     public DateTime DelayUntil {
-        get => _delayUntil.DefaultKind(DateTimeKind.Utc);
-        set => _delayUntil = value.DefaultKind(DateTimeKind.Utc);
+        get => field.DefaultKind(DateTimeKind.Utc);
+        set => field = value.DefaultKind(DateTimeKind.Utc);
     }
 
     public string ValueJson { get; set; } = "";
@@ -48,11 +41,14 @@ public sealed class DbEvent : IDbEventLogEntry
         var value = ValueJson.IsNullOrEmpty()
             ? null
             : Serializer.Read(ValueJson, typeof(object));
-        return new OperationEvent(Uuid, LoggedAt, DelayUntil, value);
+        return new OperationEvent(Uuid, LoggedAt, DelayUntil, value, KeyConflictStrategy.Fail);
     }
 
     public DbEvent UpdateFrom(OperationEvent model, VersionGenerator<long>? versionGenerator = null)
     {
+        if (model.Uuid.IsNullOrEmpty())
+            throw new ArgumentOutOfRangeException(nameof(model), "Uuid is empty.");
+
         Uuid = model.Uuid;
         if (versionGenerator != null)
             Version = versionGenerator.NextVersion(Version);

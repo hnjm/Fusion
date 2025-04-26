@@ -1,6 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
 using ActualLab.Channels;
-using ActualLab.Internal;
 using ActualLab.Rpc.Infrastructure;
 using ActualLab.Rpc.WebSockets;
 
@@ -15,6 +13,7 @@ public class RpcTestClient(
     {
         public static Options Default { get; set; } = new();
 
+        public string SerializationFormatKey { get; init; } = "";
         public BoundedChannelOptions ChannelOptions { get; init; } = WebSocketChannel<RpcMessage>.Options.Default.WriteChannelOptions;
         public Func<RpcTestClient, ChannelPair<RpcMessage>> ConnectionFactory { get; init; } = DefaultConnectionFactory;
 
@@ -48,10 +47,20 @@ public class RpcTestClient(
         return CreateConnection($"client-{pairId}", $"server-{pairId}");
     }
 
-    public RpcTestConnection CreateConnection(Symbol clientId, Symbol serverId)
+    public RpcTestConnection CreateConnection(string clientId, string serverId)
     {
-        var clientPeerRef = RpcPeerRef.NewClient(clientId);
-        var serverPeerRef = RpcPeerRef.NewServer(serverId);
+        var serializationFormatResolver = Services.GetRequiredService<RpcSerializationFormatResolver>();
+        var serializationFormatKey = Settings.SerializationFormatKey;
+        if (serializationFormatKey.IsNullOrEmpty())
+            serializationFormatKey = serializationFormatResolver.DefaultClientFormatKey;
+
+        var clientPeerRef = string.Equals(
+            serializationFormatKey,
+            serializationFormatResolver.DefaultClientFormatKey,
+            StringComparison.Ordinal)
+            ? RpcPeerRef.NewClient(clientId)
+            : RpcPeerRef.NewClient(clientId, serializationFormatKey);
+        var serverPeerRef = RpcPeerRef.NewServer(serverId, serializationFormatKey);
         return CreateConnection(clientPeerRef, serverPeerRef);
     }
 
@@ -66,7 +75,6 @@ public class RpcTestClient(
         return peerState;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override async Task<RpcConnection> ConnectRemote(RpcClientPeer clientPeer, CancellationToken cancellationToken)
     {
         var channel = await this[clientPeer.Ref].PullClientChannel(cancellationToken).ConfigureAwait(false);

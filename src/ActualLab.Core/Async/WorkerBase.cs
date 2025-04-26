@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Hosting;
-using ActualLab.Internal;
 
 namespace ActualLab.Async;
 
@@ -10,6 +9,7 @@ public abstract class WorkerBase(CancellationTokenSource? stopTokenSource = null
 
     protected bool FlowExecutionContext { get; init; } = false;
 
+    // WhenRunning should always return a task that never fails or gets cancelled
     public Task? WhenRunning => _whenRunning;
 
     protected override Task DisposeAsyncCore()
@@ -21,12 +21,16 @@ public abstract class WorkerBase(CancellationTokenSource? stopTokenSource = null
         if (_whenRunning != null)
             return _whenRunning;
         lock (Lock) {
+#pragma warning disable MA0100
             if (_whenRunning != null)
                 return _whenRunning;
 
-            this.ThrowIfDisposedOrDisposing();
-            if (StopToken.IsCancellationRequested)
-                throw Errors.AlreadyStopped();
+            if (StopToken.IsCancellationRequested || WhenDisposed != null) {
+                // We behave here like if OnStart() was cancelled right in the very beginning.
+                // In this case _whenRunning would store a task that successfully completed.
+                return _whenRunning = Task.CompletedTask;
+            }
+#pragma warning restore MA0100
 
             using var _ = FlowExecutionContext ? default : ExecutionContextExt.TrySuppressFlow();
             Task onStartTask;
@@ -39,6 +43,7 @@ public abstract class WorkerBase(CancellationTokenSource? stopTokenSource = null
             catch (Exception e) {
                 onStartTask = Task.FromException(e);
             }
+            // ReSharper disable once PossibleMultipleWriteAccessInDoubleCheckLocking
             _whenRunning = Task.Run(async () => {
                 try {
                     try {

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.Channels;
 using ActualLab.Rpc.Infrastructure;
 
@@ -5,17 +6,21 @@ namespace ActualLab.Rpc.Testing;
 
 public class RpcTestConnection
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
     private readonly object _lock = new();
-    private volatile AsyncState<ChannelPair<RpcMessage>?> _channels = new(null, true);
-    private RpcClientPeer? _clientPeer;
-    private RpcServerPeer? _serverPeer;
+#endif
+    private volatile AsyncState<ChannelPair<RpcMessage>?> _channels = new(null);
 
     public RpcTestClient TestClient { get; }
     public RpcHub Hub => TestClient.Hub;
     public RpcPeerRef ClientPeerRef { get; }
     public RpcPeerRef ServerPeerRef { get; }
-    public RpcClientPeer ClientPeer => _clientPeer ??= Hub.GetClientPeer(ClientPeerRef);
-    public RpcServerPeer ServerPeer => _serverPeer ??= Hub.GetServerPeer(ServerPeerRef);
+    [field: AllowNull, MaybeNull]
+    public RpcClientPeer ClientPeer => field ??= Hub.GetClientPeer(ClientPeerRef);
+    [field: AllowNull, MaybeNull]
+    public RpcServerPeer ServerPeer => field ??= Hub.GetServerPeer(ServerPeerRef);
 
     public ChannelPair<RpcMessage>? Channels {
         // ReSharper disable once InconsistentlySynchronizedField

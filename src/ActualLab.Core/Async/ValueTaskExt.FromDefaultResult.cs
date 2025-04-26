@@ -1,12 +1,23 @@
+using System.Diagnostics.CodeAnalysis;
+using ActualLab.OS;
+
 namespace ActualLab.Async;
 
 public static partial class ValueTaskExt
 {
-    private static readonly ConcurrentDictionary<Type, object> FromDefaultResultCache = new();
+    private static readonly ConcurrentDictionary<Type, object> FromDefaultResultCache
+        = new(HardwareInfo.ProcessorCountPo2, 131);
 
     // FromDefaultResult
 
-    public static object FromDefaultResult(Type resultType)
+    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "We assume ValueTask<T> constructors are preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume Task<T> constructors are preserved")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ValueTask<>))]
+    public static object FromDefaultResult(
+        [DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicParameterlessConstructor |
+            DynamicallyAccessedMemberTypes.PublicConstructors |
+            DynamicallyAccessedMemberTypes.NonPublicConstructors)] Type resultType)
         => FromDefaultResultCache.GetOrAdd(resultType,
             static t => {
                 // ReSharper disable once UseCollectionExpression

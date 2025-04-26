@@ -2,5 +2,5 @@ namespace Samples.MeshRpc;
 
 public interface IMeshPeerRef
 {
-    Symbol HostId { get; }
+    public string HostId { get; }
 }

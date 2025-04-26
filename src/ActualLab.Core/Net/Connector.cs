@@ -7,11 +7,11 @@ public sealed class Connector<TConnection> : WorkerBase
     where TConnection : class
 {
     private readonly Func<CancellationToken, Task<TConnection>> _connectionFactory;
-    private volatile AsyncState<State> _state = new(State.New(), true);
+    private volatile AsyncState<State> _state = new(State.New());
     private long _reconnectsAt;
     private bool _resetTryIndex;
 
-    public AsyncState<Result<bool>> IsConnected { get; private set; } = new(false, true);
+    public AsyncState<Result<bool>> IsConnected { get; private set; } = new(false);
     public Moment? ReconnectsAt { // Relative to CpuClock.Now
         get {
             var reconnectsAt = Interlocked.Read(ref _reconnectsAt);
@@ -144,7 +144,7 @@ public sealed class Connector<TConnection> : WorkerBase
                 }
 
                 if (error != null) {
-                    IsConnected = IsConnected.SetNext(Result.Error<bool>(error));
+                    IsConnected = IsConnected.SetNext(Result.NewError<bool>(error));
                     Log?.LogError(error, "{LogTag}: Disconnected", LogTag);
                 }
                 else {
@@ -184,13 +184,14 @@ public sealed class Connector<TConnection> : WorkerBase
         lock (Lock) {
             var prevState = _state;
             if (!prevState.Value.ConnectionTask.IsCompleted)
-                prevState.Value.ConnectionSource.TrySetCanceled();
+                prevState.Value.ConnectionSource.TrySetCanceled(StopToken);
 
             _state = prevState.SetNext(State.NewCancelled(StopToken));
             _state.SetFinal(StopToken); // StopToken is cancelled here
             prevState.Value.Dispose();
 
-            if (IsConnected.Value.IsValue(out var isConnected) && isConnected)
+            var (isConnected, error) = IsConnected.Value;
+            if (error != null && isConnected)
                 IsConnected = IsConnected.SetNext(false);
             IsConnected.SetFinal(Errors.AlreadyDisposed(GetType()));
         }
@@ -201,16 +202,16 @@ public sealed class Connector<TConnection> : WorkerBase
 
     [StructLayout(LayoutKind.Auto)]
     private readonly record struct State(
-        TaskCompletionSource<TConnection> ConnectionSource,
+        AsyncTaskMethodBuilder<TConnection> ConnectionSource,
         Exception? LastError = null,
         int TryIndex = 0) : IDisposable
     {
         public Task<TConnection> ConnectionTask => ConnectionSource.Task;
 
         public static State New()
-            => new(TaskCompletionSourceExt.New<TConnection>());
+            => new(AsyncTaskMethodBuilderExt.New<TConnection>());
         public static State NewCancelled(CancellationToken cancellationToken)
-            => new(TaskCompletionSourceExt.New<TConnection>().WithCancellation(cancellationToken));
+            => new(AsyncTaskMethodBuilderExt.New<TConnection>().WithCancellation(cancellationToken));
 
         public void Dispose()
         {

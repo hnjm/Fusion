@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using ActualLab.CommandR.Interception;
 using ActualLab.Fusion.Internal;
 using ActualLab.Interception;
+using ActualLab.OS;
 using ActualLab.Rpc;
 
 namespace ActualLab.Fusion.Interception;
@@ -10,7 +11,11 @@ public class ComputeServiceInterceptor : Interceptor
 {
     public new record Options : Interceptor.Options
     {
-        public static Options Default { get; set; } = new();
+        public static Options Default { get; set; } = new() {
+            // This interceptor is shared, so we adjust its cache concurrency settings
+            HandlerCacheConcurrencyLevel = HardwareInfo.GetProcessorCountPo2Factor(2),
+            HandlerCacheCapacity = 131,
+        };
     }
 
     public readonly FusionHub Hub;
@@ -22,75 +27,33 @@ public class ComputeServiceInterceptor : Interceptor
     {
         Hub = hub;
         CommandServiceInterceptor = Hub.CommanderHub.Interceptor;
+        UsesUntypedHandlers = true;
     }
 
     public override Func<Invocation, object?>? SelectHandler(in Invocation invocation)
         => GetHandler(invocation) ?? CommandServiceInterceptor.SelectHandler(invocation);
 
-    protected override Func<Invocation, object?>? CreateHandler<
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TUnwrapped>
-        (Invocation initialInvocation, MethodDef methodDef)
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume proxy-related code is preserved")]
+    protected override Func<Invocation, object?>? CreateUntypedHandler(Invocation initialInvocation, MethodDef methodDef)
     {
-        var function = new ComputeMethodFunction<TUnwrapped>((ComputeMethodDef)methodDef, Hub);
-        return CreateHandler(function);
-    }
-
-    protected static Func<Invocation, object?> CreateHandler<TUnwrapped>(ComputeMethodFunction<TUnwrapped> function)
-    {
-        var methodDef = function.MethodDef;
-        var ctIndex = methodDef.CancellationTokenIndex;
-        return ctIndex >= 0
-            ? RegularHandler
-            : NoCancellationTokenHandler;
-
-        object? NoCancellationTokenHandler(Invocation invocation) {
-            var input = new ComputeMethodInput(function, methodDef, invocation);
-            // Inlined:
-            // var task = function.InvokeAndStrip(input, ComputeContext.Current, default);
-            var context = ComputeContext.Current;
-            var computed = ComputedRegistry.Instance.Get(input) as Computed<TUnwrapped>; // = input.GetExistingComputed()
-            var task = ComputedImpl.TryUseExisting(computed, context)
-                ? ComputedImpl.StripToTask(computed, context)
-                : function.TryRecompute(input, context, default);
-            // ReSharper disable once HeapView.BoxingAllocation
-            return methodDef.ReturnsValueTask ? new ValueTask<TUnwrapped>(task) : task;
-        }
-
-        object? RegularHandler(Invocation invocation) {
-            var input = new ComputeMethodInput(function, methodDef, invocation);
-            var arguments = invocation.Arguments;
-            var cancellationToken = arguments.GetCancellationToken(ctIndex);
-            try {
-                // Inlined:
-                // var task = function.InvokeAndStrip(input, ComputeContext.Current, cancellationToken);
-                var context = ComputeContext.Current;
-                var computed = ComputedRegistry.Instance.Get(input) as Computed<TUnwrapped>; // = input.GetExistingComputed()
-                var task = ComputedImpl.TryUseExisting(computed, context)
-                    ? ComputedImpl.StripToTask(computed, context)
-                    : function.TryRecompute(input, context, cancellationToken);
-                // ReSharper disable once HeapView.BoxingAllocation
-                return methodDef.ReturnsValueTask ? new ValueTask<TUnwrapped>(task) : task;
-            }
-            finally {
-                if (cancellationToken.CanBeCanceled)
-                    // ComputedInput is stored in ComputeRegistry, so we remove CancellationToken there
-                    // to prevent memory leaks + possible unexpected cancellations on .Update calls.
-                    arguments.SetCancellationToken(ctIndex, default);
-            }
-        }
+        var computeMethodDef = (ComputeMethodDef)methodDef;
+        var function = (ComputeMethodFunction)typeof(ComputeMethodFunction<>)
+            .MakeGenericType(computeMethodDef.UnwrappedReturnType)
+            .CreateInstance(Hub, computeMethodDef);
+        return function.ComputeServiceInterceptorHandler;
     }
 
     // We don't need to decorate this method with any dynamic access attributes
-    protected override MethodDef? CreateMethodDef(MethodInfo method, Type proxyType)
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume proxy-related code is preserved")]
+    protected override MethodDef? CreateMethodDef(MethodInfo method,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type proxyType)
     {
         var type = proxyType.NonProxyType();
-#pragma warning disable IL2072
         var options = Hub.ComputedOptionsProvider.GetComputedOptions(type, method);
         if (options == null)
             return null;
 
         var methodDef = new ComputeMethodDef(type, method, this);
-#pragma warning restore IL2072
         return methodDef.IsValid ? methodDef : null;
     }
 

@@ -1,23 +1,13 @@
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
+using System.Diagnostics.CodeAnalysis;
+using ActualLab.OS;
 using ActualLab.Rpc.Infrastructure;
 using ActualLab.Rpc.Internal;
-using ActualLab.Rpc.Serialization;
 using Errors = ActualLab.Internal.Errors;
 
 namespace ActualLab.Rpc;
 
 public sealed class RpcHub : ProcessorBase, IHasServices, IHasId<Guid>
 {
-    private HostId? _hostId;
-    private RpcServiceRegistry? _serviceRegistry;
-    private IEnumerable<RpcPeerTracker>? _peerTrackers;
-    private RpcSystemCallSender? _systemCallSender;
-    private RpcClient? _client;
-    private RpcClientPeer? _defaultPeer;
-    private RpcClientPeer? _loopbackPeer;
-    private RpcClientPeer? _localPeer;
-
     internal readonly RpcServiceDefBuilder ServiceDefBuilder;
     internal readonly RpcMethodDefBuilder MethodDefBuilder;
     internal readonly RpcBackendServiceDetector BackendServiceDetector;
@@ -26,7 +16,6 @@ public sealed class RpcHub : ProcessorBase, IHasServices, IHasId<Guid>
     internal readonly RpcServiceScopeResolver ServiceScopeResolver;
     internal readonly RpcSafeCallRouter CallRouter;
     internal readonly RpcRerouteDelayer RerouteDelayer;
-    internal readonly RpcArgumentSerializer ArgumentSerializer;
     internal readonly RpcHashProvider HashProvider;
     internal readonly RpcInboundCallFilter InboundCallFilter;
     internal readonly RpcInboundContextFactory InboundContextFactory;
@@ -39,25 +28,34 @@ public sealed class RpcHub : ProcessorBase, IHasServices, IHasId<Guid>
     internal readonly RpcCallTracerFactory CallTracerFactory;
     internal readonly RpcCallLoggerFactory CallLoggerFactory;
     internal readonly RpcCallLoggerFilter CallLoggerFilter;
-    internal IEnumerable<RpcPeerTracker> PeerTrackers => _peerTrackers ??= Services.GetRequiredService<IEnumerable<RpcPeerTracker>>();
-    internal RpcSystemCallSender SystemCallSender => _systemCallSender ??= Services.GetRequiredService<RpcSystemCallSender>();
-    internal RpcClient Client => _client ??= Services.GetRequiredService<RpcClient>();
+    [field: AllowNull, MaybeNull]
+    internal IEnumerable<RpcPeerTracker> PeerTrackers => field ??= Services.GetRequiredService<IEnumerable<RpcPeerTracker>>();
+    [field: AllowNull, MaybeNull]
+    internal RpcSystemCallSender SystemCallSender => field ??= Services.GetRequiredService<RpcSystemCallSender>();
+    [field: AllowNull, MaybeNull]
+    internal RpcClient Client => field ??= Services.GetRequiredService<RpcClient>();
 
-    internal ConcurrentDictionary<RpcPeerRef, RpcPeer> Peers { get; } = new();
+    internal ConcurrentDictionary<RpcPeerRef, RpcPeer> Peers { get; } = new(HardwareInfo.ProcessorCountPo2, 17);
 
     public Guid Id { get; init; } = Guid.NewGuid();
-    public HostId HostId => _hostId ??= Services.GetRequiredService<HostId>();
+    [field: AllowNull, MaybeNull]
+    public HostId HostId => field ??= Services.GetRequiredService<HostId>();
     public IServiceProvider Services { get; }
     public RpcConfiguration Configuration { get; }
-    public RpcServiceRegistry ServiceRegistry => _serviceRegistry ??= Services.GetRequiredService<RpcServiceRegistry>();
-    public RpcInternalServices InternalServices;
+    [field: AllowNull, MaybeNull]
+    public RpcServiceRegistry ServiceRegistry => field ??= Services.GetRequiredService<RpcServiceRegistry>();
+    public RpcSerializationFormatResolver SerializationFormats { get; }
+    public RpcInternalServices InternalServices { get; }
     public RpcLimits Limits { get; }
     public MomentClock Clock { get; }
 
     // Most useful peers are cached
-    public RpcClientPeer DefaultPeer => _defaultPeer ??= (RpcClientPeer)GetPeer(RpcPeerRef.Default);
-    public RpcClientPeer LoopbackPeer => _loopbackPeer ??= (RpcClientPeer)GetPeer(RpcPeerRef.Loopback);
-    public RpcClientPeer LocalPeer => _localPeer ??= (RpcClientPeer)GetPeer(RpcPeerRef.Local);
+    [field: AllowNull, MaybeNull]
+    public RpcClientPeer DefaultPeer => field ??= (RpcClientPeer)GetPeer(RpcPeerRef.Default);
+    [field: AllowNull, MaybeNull]
+    public RpcClientPeer LoopbackPeer => field ??= (RpcClientPeer)GetPeer(RpcPeerRef.Loopback);
+    [field: AllowNull, MaybeNull]
+    public RpcClientPeer LocalPeer => field ??= (RpcClientPeer)GetPeer(RpcPeerRef.Local);
 
     public RpcHub(IServiceProvider services)
     {
@@ -67,7 +65,8 @@ public sealed class RpcHub : ProcessorBase, IHasServices, IHasId<Guid>
         Configuration = services.GetRequiredService<RpcConfiguration>();
         Configuration.Freeze();
 
-        // Delegates
+        // Services & delegates
+        SerializationFormats = services.GetRequiredService<RpcSerializationFormatResolver>();
         ServiceDefBuilder = services.GetRequiredService<RpcServiceDefBuilder>();
         MethodDefBuilder = services.GetRequiredService<RpcMethodDefBuilder>();
         BackendServiceDetector = services.GetRequiredService<RpcBackendServiceDetector>();
@@ -76,7 +75,6 @@ public sealed class RpcHub : ProcessorBase, IHasServices, IHasId<Guid>
         ServiceScopeResolver = services.GetRequiredService<RpcServiceScopeResolver>();
         CallRouter = services.GetRequiredService<RpcSafeCallRouter>();
         RerouteDelayer = services.GetRequiredService<RpcRerouteDelayer>();
-        ArgumentSerializer = services.GetRequiredService<RpcArgumentSerializer>();
         HashProvider = services.GetRequiredService<RpcHashProvider>();
         InboundCallFilter = services.GetRequiredService<RpcInboundCallFilter>();
         InboundContextFactory = services.GetRequiredService<RpcInboundContextFactory>();

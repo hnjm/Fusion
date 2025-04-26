@@ -3,7 +3,11 @@ namespace ActualLab.OS;
 public static class HardwareInfo
 {
     private const int RefreshIntervalTicks = 30_000; // Tick = millisecond
-    private static readonly object Lock = new();
+#if NET9_0_OR_GREATER
+    private static readonly Lock StaticLock = new();
+#else
+    private static readonly object StaticLock = new();
+#endif
     private static volatile int _processorCount;
     private static volatile int _processorCountPo2;
     private static volatile int _lastRefreshTicks =
@@ -44,7 +48,7 @@ public static class HardwareInfo
         if (now - _lastRefreshTicks < RefreshIntervalTicks)
             return;
 
-        lock (Lock) {
+        lock (StaticLock) {
             if (now - _lastRefreshTicks < RefreshIntervalTicks)
                 return;
 
@@ -52,7 +56,7 @@ public static class HardwareInfo
             if (IsSingleThreaded)
                 _processorCount = 1; // Weird, but Environment.ProcessorCount reports true CPU count in Blazor!
 
-            _processorCountPo2 = Math.Max(1, (int) Bits.GreaterOrEqualPowerOf2((uint) _processorCount));
+            _processorCountPo2 = Math.Max(1, (int)Bits.GreaterOrEqualPowerOf2((ulong)_processorCount));
             // This should be done at last, otherwise there is a chance
             // another thread sees _processorCount == 0
             _lastRefreshTicks = now;

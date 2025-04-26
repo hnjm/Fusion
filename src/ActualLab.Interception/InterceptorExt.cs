@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ActualLab.OS;
 
 namespace ActualLab.Interception;
@@ -9,8 +10,10 @@ public static class InterceptorExt
     private static readonly MethodInfo InterceptUntypedMethod = typeof(InterceptorExt)
         .GetMethod(nameof(InterceptUntypedImpl), BindingFlags.Static | BindingFlags.NonPublic)!;
     private static readonly ConcurrentDictionary<Type, InterceptUntypedFunc> InterceptUntypedCache
-        = new(HardwareInfo.GetProcessorCountPo2Factor(4), 256);
+        = new(HardwareInfo.ProcessorCountPo2, 131);
 
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume InterceptUntypedImpl method is preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume InterceptUntypedImpl method is preserved")]
     public static object? InterceptUntyped(this Interceptor interceptor, in Invocation invocation)
         => InterceptUntypedCache.GetOrAdd(invocation.Method.ReturnType,
             static returnType => returnType == typeof(void)

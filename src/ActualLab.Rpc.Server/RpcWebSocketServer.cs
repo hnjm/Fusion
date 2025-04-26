@@ -19,6 +19,7 @@ public class RpcWebSocketServer(
         public bool ExposeBackend { get; init; } = false;
         public string RequestPath { get; init; } = RpcWebSocketClient.Options.Default.RequestPath;
         public string BackendRequestPath { get; init; } = RpcWebSocketClient.Options.Default.BackendRequestPath;
+        public string SerializationFormatParameterName { get; init; } = RpcWebSocketClient.Options.Default.SerializationFormatParameterName;
         public string ClientIdParameterName { get; init; } = RpcWebSocketClient.Options.Default.ClientIdParameterName;
         public TimeSpan ChangeConnectionDelay { get; init; } = TimeSpan.FromSeconds(0.5);
 #if NET6_0_OR_GREATER
@@ -34,7 +35,7 @@ public class RpcWebSocketServer(
     public RpcWebSocketChannelOptionsProvider WebSocketChannelOptionsProvider { get; }
         = services.GetRequiredService<RpcWebSocketChannelOptionsProvider>();
 
-    public async Task Invoke(HttpContext context, bool isBackend)
+    public virtual async Task Invoke(HttpContext context, bool isBackend)
     {
         var cancellationToken = context.RequestAborted;
         if (!context.WebSockets.IsWebSocketRequest) {
@@ -56,9 +57,9 @@ public class RpcWebSocketServer(
 #endif
             webSocket = await acceptWebSocketTask.ConfigureAwait(false);
             var properties = PropertyBag.Empty
-                .Set((RpcPeer)peer)
-                .Set(context)
-                .Set(webSocket);
+                .KeylessSet((RpcPeer)peer)
+                .KeylessSet(context)
+                .KeylessSet(webSocket);
             var webSocketOwner = new WebSocketOwner(peer.Ref.ToString(), webSocket, Services);
             var webSocketChannelOptions = WebSocketChannelOptionsProvider.Invoke(peer, properties);
             var channel = new WebSocketChannel<RpcMessage>(

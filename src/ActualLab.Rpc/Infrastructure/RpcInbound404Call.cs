@@ -7,10 +7,10 @@ public sealed class RpcInbound404Call<TResult>(RpcInboundContext context, RpcMet
 {
     public override string DebugTypeName => "<- [not found]";
 
-    protected override Task<TResult> InvokeTarget()
+    protected override Task InvokeTarget()
     {
         var message = Context.Message;
-        var (service, method) = (message.Service, message.Method);
+        var (service, method) = message.MethodRef.GetServiceAndMethodName();
         return Task.FromException<TResult>(Errors.EndpointNotFound(service, method));
     }
 }

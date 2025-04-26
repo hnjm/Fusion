@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using ActualLab.Interception;
+using ActualLab.OS;
 using ActualLab.Rpc.Diagnostics;
 using ActualLab.Rpc.Infrastructure;
 using ActualLab.Rpc.WebSockets;
@@ -12,7 +14,7 @@ public delegate RpcMethodDef RpcMethodDefBuilder(RpcServiceDef service, MethodIn
 public delegate bool RpcBackendServiceDetector(Type serviceType);
 public delegate bool RpcCommandTypeDetector(Type type);
 public delegate RpcCallTimeouts RpcCallTimeoutsProvider(RpcMethodDef methodDef);
-public delegate Symbol RpcServiceScopeResolver(RpcServiceDef serviceDef);
+public delegate string RpcServiceScopeResolver(RpcServiceDef serviceDef);
 public delegate RpcPeerRef RpcCallRouter(RpcMethodDef method, ArgumentList arguments);
 public delegate string RpcHashProvider(TextOrBytes data);
 public delegate Task RpcRerouteDelayer(CancellationToken cancellationToken);
@@ -31,9 +33,13 @@ public delegate RpcCallTracer? RpcCallTracerFactory(RpcMethodDef method);
 public delegate RpcCallLogger RpcCallLoggerFactory(RpcPeer peer, RpcCallLoggerFilter filter, ILogger log, LogLevel logLevel);
 public delegate bool RpcCallLoggerFilter(RpcPeer peer, RpcCall call);
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume RPC-related code is fully preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "We assume RPC-related code is fully preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "We assume RPC-related code is fully preserved")]
 public static class RpcDefaultDelegates
 {
-    private static readonly ConcurrentDictionary<Type, bool> IsCommandTypeCache = new();
+    private static readonly ConcurrentDictionary<Type, bool> IsCommandTypeCache
+        = new(HardwareInfo.ProcessorCountPo2, 131);
 
     public static string CommandInterfaceFullName { get; set; } = "ActualLab.CommandR.ICommand";
 
@@ -111,9 +117,13 @@ public static class RpcDefaultDelegates
     public static RpcServerConnectionFactory ServerConnectionFactory { get; set; } =
         static (peer, channel, options, cancellationToken) => Task.FromResult(new RpcConnection(channel, options));
 
+    public static Func<RpcPeer, PropertyBag, RpcFrameDelayerFactory?> FrameDelayerProvider { get; set; } =
+        RpcFrameDelayerProviders.None;
+
     public static RpcWebSocketChannelOptionsProvider WebSocketChannelOptionsProvider { get; set; } =
         static (peer, properties) => WebSocketChannel<RpcMessage>.Options.Default with {
-            FrameDelayerFactory = RpcFrameDelayers.DefaultFactoryProvider.Invoke(peer, properties),
+            Serializer = peer.Hub.SerializationFormats.Get(peer.Ref).MessageSerializerFactory.Invoke(peer),
+            FrameDelayerFactory = FrameDelayerProvider.Invoke(peer, properties),
         };
 
     public static RpcServerPeerCloseTimeoutProvider ServerPeerCloseTimeoutProvider { get; set; } =
@@ -123,7 +133,7 @@ public static class RpcDefaultDelegates
         };
 
     public static RpcPeerTerminalErrorDetector PeerTerminalErrorDetector { get; set; } =
-        static error => error is RpcReconnectFailedException or RpcRerouteException;
+        static error => error is RpcReconnectFailedException;
 
     public static RpcCallTracerFactory CallTracerFactory { get; set; } =
         static method => new RpcDefaultCallTracer(method, traceOutbound: method.IsBackend);
@@ -132,10 +142,10 @@ public static class RpcDefaultDelegates
     public static RpcCallLoggerFactory CallLoggerFactory { get; set; } =
         static (peer, filter, log, logLevel) => new RpcCallLogger(peer, filter, log, logLevel);
 
-    private static readonly Symbol KeepAliveMethodName = (Symbol)$"{nameof(IRpcSystemCalls.KeepAlive)}:1";
+    private static readonly string KeepAliveMethodName = $"{nameof(IRpcSystemCalls.KeepAlive)}:1";
     public static RpcCallLoggerFilter CallLoggerFilter { get; set; } =
         static (peer, call) => {
             var methodDef = call.MethodDef;
-            return !(methodDef.IsSystem && methodDef.Name == KeepAliveMethodName);
+            return !(methodDef.IsSystem && string.Equals(methodDef.Name, KeepAliveMethodName, StringComparison.Ordinal));
         };
 }

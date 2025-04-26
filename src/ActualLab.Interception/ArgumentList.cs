@@ -1,21 +1,30 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection.Emit;
-using ActualLab.Internal;
 using ActualLab.OS;
 
 namespace ActualLab.Interception;
 
 #pragma warning disable CA1721
 
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
 public abstract partial record ArgumentList
 {
     protected static readonly ConcurrentDictionary<
         (ArgumentListType, MethodInfo),
-        LazySlim<(ArgumentListType, MethodInfo), Func<object?, ArgumentList, object?>>> InvokerCache = new();
+        LazySlim<(ArgumentListType, MethodInfo), Func<object?, ArgumentList, object?>>> InvokerCache
+        = new(HardwareInfo.ProcessorCountPo2, 131);
 
-    public static readonly bool AllowGenerics
-        = RuntimeCodegen.Mode == RuntimeCodegenMode.DynamicMethods && !OSInfo.IsAnyClient;
+#if NET9_0_OR_GREATER
+    [FeatureSwitchDefinition("ArgumentList.DisableGenerics")]
+    public static bool DisableGenerics { get; }
+        = AppContext.TryGetSwitch("ArgumentList.DisableGenerics", out bool value) && value;
+#else
+    public static bool DisableGenerics => false;
+#endif
+
+    public static readonly bool UseGenerics
+        = !DisableGenerics && RuntimeCodegen.Mode == RuntimeCodegenMode.DynamicMethods && !OSInfo.IsAnyClient;
 
     public static readonly ArgumentList Empty = new ArgumentList0();
 
@@ -40,7 +49,7 @@ public abstract partial record ArgumentList
     // Virtual non-generic method for frequent operation
     [MethodImpl(MethodImplOptions.NoInlining)]
     public virtual CancellationToken GetCancellationToken(int index)
-        => throw new ArgumentOutOfRangeException(nameof(index));
+        => default;
 
     public virtual void Set<T>(int index, T value)
          => throw new ArgumentOutOfRangeException(nameof(index));
@@ -50,16 +59,14 @@ public abstract partial record ArgumentList
     // Virtual non-generic method for frequent operation
     [MethodImpl(MethodImplOptions.NoInlining)]
     public virtual void SetCancellationToken(int index, CancellationToken item)
-         => throw new ArgumentOutOfRangeException(nameof(index));
+    { }
 
     public virtual void SetFrom(ArgumentList other)
     { }
 
     public abstract Func<object?, ArgumentList, object?> GetInvoker(MethodInfo method);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public abstract void Read(ArgumentListReader reader);
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public abstract void Write(ArgumentListWriter writer);
 
     // Equality
@@ -82,6 +89,7 @@ public sealed record ArgumentList0 : ArgumentList
     public override ArgumentList Duplicate()
         => new ArgumentList0();
 
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume ArgumentList code is preserved")]
     public override Func<object?, ArgumentList, object?> GetInvoker(MethodInfo method)
         => InvokerCache.GetOrAdd(
             (_type, method),
@@ -146,11 +154,9 @@ public sealed record ArgumentList0 : ArgumentList
 
     // Read & Write
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Read(ArgumentListReader reader)
     { }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
     public override void Write(ArgumentListWriter writer)
     { }
 

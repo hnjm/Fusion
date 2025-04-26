@@ -5,23 +5,15 @@ public sealed class FuncComputedStateEx<T> : ComputedState<T>
     public Func<ComputedState<T>, CancellationToken, Task<T>> Computer { get; }
 
     public FuncComputedStateEx(
-        Options settings,
+        Options options,
         IServiceProvider services,
         Func<ComputedState<T>, CancellationToken, Task<T>> computer)
-        : base(settings, services, false)
+        : base(options, services, false)
     {
         Computer = computer;
-        Initialize(settings);
+        Initialize(options);
     }
 
-    protected override Task<T> Compute(CancellationToken cancellationToken)
-    {
-        if (IsDisposed) {
-            // Once the state is disposed, any update will take indefinitely long time
-            return TaskExt
-                .NewNeverEndingUnreferenced<T>()
-                .WaitAsync(cancellationToken);
-        }
-        return Computer.Invoke(this, cancellationToken);
-    }
+    protected override Task Compute(CancellationToken cancellationToken)
+        => GetComputeTaskIfDisposed() ?? Computer.Invoke(this, cancellationToken);
 }

@@ -1,15 +1,17 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ActualLab.Fusion.EntityFramework;
 
 public interface IDbShardResolver : IHasServices
 {
-    IDbShardRegistry ShardRegistry { get; }
+    public IDbShardRegistry ShardRegistry { get; }
 
-    DbShard Resolve(object source);
+    public string Resolve(object source);
 }
 
 public interface IDbShardResolver<TDbContext> : IDbShardResolver
 {
-    new IDbShardRegistry<TDbContext> ShardRegistry { get; }
+    public new IDbShardRegistry<TDbContext> ShardRegistry { get; }
 }
 
 public abstract class DbShardResolver(IServiceProvider services) : IDbShardResolver
@@ -22,34 +24,34 @@ public abstract class DbShardResolver(IServiceProvider services) : IDbShardResol
     IDbShardRegistry IDbShardResolver.ShardRegistry => UntypedShardRegistry;
     protected abstract IDbShardRegistry UntypedShardRegistry { get; }
 
-    public abstract DbShard Resolve(object source);
+    public abstract string Resolve(object source);
 }
 
 public class DbShardResolver<TDbContext>(IServiceProvider services)
     : DbShardResolver(services), IDbShardResolver<TDbContext>
 {
-    private IDbShardRegistry<TDbContext>? _shardRegistry;
-
     protected override IDbShardRegistry UntypedShardRegistry => ShardRegistry;
-    public IDbShardRegistry<TDbContext> ShardRegistry
-        => _shardRegistry ??= Services.GetRequiredService<IDbShardRegistry<TDbContext>>();
 
-    public override DbShard Resolve(object source)
+    [field: AllowNull, MaybeNull]
+    public IDbShardRegistry<TDbContext> ShardRegistry
+        => field ??= Services.GetRequiredService<IDbShardRegistry<TDbContext>>();
+
+    public override string Resolve(object source)
     {
         if (ShardRegistry.HasSingleShard)
-            return default;
+            return DbShard.Single;
 
         switch (source) {
             case Session session:
-                return new DbShard(session.GetTag(SessionShardTag));
+                return DbShard.Validate(session.GetTag(SessionShardTag));
             case IHasShard hasShard:
-                return hasShard.Shard;
+                return DbShard.Validate(hasShard.Shard);
             case ICommand command:
                 if (command is ISessionCommand sessionCommand)
-                    return new DbShard(sessionCommand.Session.GetTag(SessionShardTag));
-                return default;
+                    return DbShard.Validate(sessionCommand.Session.GetTag(SessionShardTag));
+                return DbShard.Single;
             default:
-                return default;
+                return DbShard.Single;
         }
     }
 }

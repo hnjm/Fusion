@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
 using ActualLab.Internal;
 
 namespace ActualLab.Fusion.Blazor;
@@ -7,35 +9,54 @@ public class BlazorCircuitContext(IServiceProvider services) : ProcessorBase
 {
     private static long _lastId;
 
-    private readonly TaskCompletionSource<Unit> _whenReady = TaskCompletionSourceExt.New<Unit>();
-    private volatile int _isPrerendering;
-    private ComponentBase? _rootComponent;
-    private Dispatcher? _dispatcher;
-    private ILogger? _log;
+    protected readonly AsyncTaskMethodBuilder WhenInitializedSource = AsyncTaskMethodBuilderExt.New();
+    [field: AllowNull, MaybeNull]
+    protected ILogger Log => field ??= Services.LogFor(GetType());
 
-    protected ILogger Log => _log ??= Services.LogFor(GetType());
+    public long Id { get; } = Interlocked.Increment(ref _lastId);
 
     public IServiceProvider Services { get; } = services;
-    public long Id { get; } = Interlocked.Increment(ref _lastId);
-    public Task WhenReady => _whenReady.Task;
-    public bool IsPrerendering => _isPrerendering != 0;
-    public Dispatcher Dispatcher => _dispatcher ??= RootComponent.GetDispatcher();
+    [field: AllowNull, MaybeNull]
+    public JSRuntimeInfo JSRuntimeInfo => field ??= Services.GetRequiredService<JSRuntimeInfo>();
+    [field: AllowNull, MaybeNull]
+    public NavigationManager NavigationManager => field ??= Services.GetRequiredService<NavigationManager>();
 
-    public ComponentBase RootComponent {
-        get => _rootComponent ?? throw Errors.NotInitialized(nameof(RootComponent));
-        set {
-            if (Interlocked.CompareExchange(ref _rootComponent, value, null) != null)
-                throw Errors.AlreadyInitialized(nameof(RootComponent));
+    public Dispatcher Dispatcher {
+        get => field ?? throw Errors.NotInitialized();
+        protected set;
+    } = null!;
 
-            _whenReady.TrySetResult(default);
-        }
-    }
+    public RenderModeDef RenderMode {
+        get => field ?? throw Errors.NotInitialized();
+        protected set;
+    } = null!;
 
-    public ClosedDisposable<(BlazorCircuitContext, int)> Prerendering(bool isPrerendering = true)
+    // ReSharper disable once InconsistentlySynchronizedField
+    public Task WhenInitialized => WhenInitializedSource.Task;
+
+    // Shortcuts
+    public IJSRuntime? JSRuntime => JSRuntimeInfo.Runtime;
+    public bool IsPrerendering => JSRuntimeInfo.IsPrerendering;
+    public bool IsInteractive => JSRuntimeInfo.IsInteractive;
+
+    public virtual void Initialize(
+        Dispatcher dispatcher,
+        RenderModeDef renderMode)
     {
-        var oldIsPrerendering = Interlocked.Exchange(ref _isPrerendering, isPrerendering ? 1 : 0);
-        return new ClosedDisposable<(BlazorCircuitContext Context, int OldIsPrerendering)>(
-            (this, oldIsPrerendering),
-            state => Interlocked.Exchange(ref state.Context._isPrerendering, state.OldIsPrerendering));
+        lock (Lock) {
+            if (IsDisposed)
+                throw Errors.AlreadyDisposed();
+
+            if (WhenInitializedSource.Task.IsCompleted) {
+                if (Dispatcher == dispatcher && RenderMode == renderMode)
+                    return;
+
+                throw Errors.AlreadyInitialized();
+            }
+
+            Dispatcher = dispatcher;
+            RenderMode = renderMode;
+            WhenInitializedSource.TrySetResult();
+        }
     }
 }

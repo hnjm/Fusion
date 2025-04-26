@@ -1,34 +1,44 @@
+using MessagePack;
+
 namespace ActualLab.Rpc.Infrastructure;
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject]
 [Newtonsoft.Json.JsonObject(Newtonsoft.Json.MemberSerialization.OptOut)]
 public readonly partial record struct RpcHeader : ICanBeNone<RpcHeader>
 {
     public static RpcHeader None => default;
 
-    private readonly string? _name;
     private readonly string? _value;
 
-    [DataMember(Order = 0), MemoryPackOrder(0)]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
+    public RpcHeaderKey Key { get; init; }
+
+    [DataMember(Order = 0), MemoryPackOrder(0), Key(0)]
     public string Name {
-        get => _name ?? "";
-        init => _name = value;
+        get => Key.Name;
+        init => Key = RpcHeaderKey.NewOrWellKnown(value);
     }
 
-    [DataMember(Order = 1), MemoryPackOrder(1)]
+    [DataMember(Order = 1), MemoryPackOrder(1), Key(1)]
     public string Value {
         get => _value ?? "";
         init => _value = value;
     }
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public bool IsNone
-        => ReferenceEquals(_name, null) && ReferenceEquals(_value, null);
+        => Key.IsNone && ReferenceEquals(_value, null);
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
-    public RpcHeader(string? name, string? value = "")
+    public RpcHeader(RpcHeaderKey key, string? value = "")
     {
-        _name = name;
+        Key = key;
+        _value = value;
+    }
+
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
+    public RpcHeader(string name, string? value = "")
+    {
+        Key = RpcHeaderKey.NewOrWellKnown(name);
         _value = value;
     }
 
@@ -37,12 +47,11 @@ public readonly partial record struct RpcHeader : ICanBeNone<RpcHeader>
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public RpcHeader With(string value)
-        => new(Name, value);
+        => new(Key, value);
 
     // Equality is based solely on header name
     public bool Equals(RpcHeader other)
-        => string.Equals(Name, other.Name, StringComparison.Ordinal);
-
+        => Key == other.Key;
     public override int GetHashCode()
-        => StringComparer.Ordinal.GetHashCode(Name);
+        => Key.GetHashCode();
 }

@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using ActualLab.Interception;
 using ActualLab.Rpc.Diagnostics;
+using ActualLab.Rpc.Infrastructure;
+using ActualLab.Rpc.Serialization;
 
 namespace ActualLab.Rpc;
 
@@ -10,37 +12,39 @@ public sealed class RpcMethodDef : MethodDef
         = new(StringComparer.Ordinal) { "Ack", "AckEnd", "B", "I", "End" };
 
     private string? _toStringCached;
-    private readonly Symbol _name;
 
     public RpcHub Hub { get; }
     public RpcServiceDef Service { get; }
-    public Symbol Name {
-        get => _name;
+
+    public string Name {
+        get;
         init {
-            if (value.IsEmpty)
+            if (value.IsNullOrEmpty())
                 throw new ArgumentOutOfRangeException(nameof(value));
 
-            _name = value;
-            FullName = $"{Service.Name.Value}.{value}";
+            field = value;
+            FullName = ComposeFullName(Service.Name, value);
+            Ref = new RpcMethodRef(FullName, this);
         }
     }
 
-    public new readonly Symbol FullName;
+    public new readonly string FullName = "";
+    public readonly RpcMethodRef Ref;
 
     public readonly ArgumentListType ArgumentListType;
     public readonly ArgumentListType ResultListType;
-    public readonly bool HasObjectTypedArguments;
     public readonly bool NoWait;
     public readonly bool IsSystem;
     public readonly bool IsBackend;
     public readonly bool IsStream;
+    public readonly bool HasPolymorphicArguments;
+    public readonly bool HasPolymorphicResult;
     public bool IsCommand { get; init; }
-    public bool AllowArgumentPolymorphism { get; init; }
-    public bool AllowResultPolymorphism { get; init; }
     public RpcCallTracer? Tracer { get; init; }
     public LegacyNames LegacyNames { get; init; }
-    public PropertyBag CustomProperties { get; init; } = PropertyBag.Empty;
+    public PropertyBag Properties { get; init; }
     public RpcCallTimeouts Timeouts { get; init; }
+    public RpcSystemCallKind SystemCallKind { get; init; }
 
     public RpcMethodDef(
         RpcServiceDef service,
@@ -54,16 +58,16 @@ public sealed class RpcMethodDef : MethodDef
         Hub = service.Hub;
         ArgumentListType = ArgumentListType.Get(ParameterTypes);
         ResultListType = ArgumentListType.Get(UnwrappedReturnType);
-        HasObjectTypedArguments = ParameterTypes.Any(type => typeof(object) == type);
         NoWait = UnwrappedReturnType == typeof(RpcNoWait);
         IsSystem = service.IsSystem;
         IsBackend = service.IsBackend;
         IsStream = IsSystem && StreamMethodNames.Contains(method.Name);
+        HasPolymorphicArguments = ParameterTypes.Any(RpcArgumentSerializer.IsPolymorphic);
+        HasPolymorphicResult = RpcArgumentSerializer.IsPolymorphic(UnwrappedReturnType);
 
         Service = service;
         var nameSuffix = $":{ParameterTypes.Length}";
         Name = Method.Name + nameSuffix;
-        AllowResultPolymorphism = AllowArgumentPolymorphism = IsSystem || IsBackend;
 
         if (!IsAsyncMethod)
             IsValid = false;
@@ -77,6 +81,15 @@ public sealed class RpcMethodDef : MethodDef
             && ParameterTypes[1] == typeof(CancellationToken)
             && Hub.CommandTypeDetector(ParameterTypes[0]);
         Timeouts = Hub.CallTimeoutsProvider(this).Normalize();
+
+        SystemCallKind = service.Type == typeof(IRpcSystemCalls)
+            ? Method.Name switch {
+                nameof(IRpcSystemCalls.Ok) => RpcSystemCallKind.Ok,
+                nameof(IRpcSystemCalls.I) => RpcSystemCallKind.Item,
+                nameof(IRpcSystemCalls.B) => RpcSystemCallKind.Batch,
+                _ => RpcSystemCallKind.OtherOrNone,
+            }
+            : RpcSystemCallKind.OtherOrNone;
     }
 
     public override string ToString()
@@ -87,5 +100,40 @@ public sealed class RpcMethodDef : MethodDef
         var arguments = ParameterTypes.Select(t => t.GetName()).ToDelimitedString();
         var returnType = UnwrappedReturnType.GetName();
         return  $"'{(useShortName ? Name : FullName)}': ({arguments}) -> {returnType}{(IsValid ? "" : " - invalid")}";
+    }
+
+    // Helpers
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string ComposeFullName(string serviceName, string methodName)
+        => string.Concat(serviceName, ".", methodName);
+
+    public static (string ServiceName, string MethodName) SplitFullName(string fullName)
+    {
+        var dotIndex = fullName.LastIndexOf('.');
+        if (dotIndex < 0)
+            return ("", fullName);
+
+        var serviceName = fullName[..dotIndex];
+        var methodName = fullName[(dotIndex + 1)..];
+        return (serviceName, methodName);
+    }
+
+    public bool IsCallResultMethod()
+    {
+        if (!IsSystem)
+            return false;
+
+        var systemCallSender = Hub.SystemCallSender;
+        return this == systemCallSender.OkMethodDef
+            || this == systemCallSender.ErrorMethodDef;
+    }
+
+    public bool IsStreamResultMethod()
+    {
+        var systemCallSender = Hub.SystemCallSender;
+        return this == systemCallSender.BatchMethodDef
+            || this == systemCallSender.ItemMethodDef
+            || this == systemCallSender.EndMethodDef;
     }
 }

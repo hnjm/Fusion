@@ -1,46 +1,58 @@
+using System.Diagnostics.CodeAnalysis;
+using ActualLab.Caching;
 using ActualLab.Fusion.Internal;
 using ActualLab.Locking;
 
 namespace ActualLab.Fusion;
 
 #pragma warning disable CA1721
-
 #pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 
 public interface IComputedSource : IComputeFunction
 {
-    ComputedOptions ComputedOptions { get; }
-    Computed Computed { get; }
+    public ComputedOptions ComputedOptions { get; }
+    public Func<ComputedSource, CancellationToken, Task> Computer { get; }
+    public Computed Computed { get; }
+
+    public event Action<Computed>? Invalidated;
+    public event Action<Computed>? Updated;
 }
 
-public class ComputedSource<T> : ComputedInput,
-    IComputeFunction<T>, IComputedSource,
-    IEquatable<ComputedSource<T>>
+public interface IComputedSource<T> : IComputedSource
 {
-    private volatile ComputedSourceComputed<T> _computed;
-    private volatile Func<ComputedSource<T>, CancellationToken, ValueTask<T>>? _computer;
-    private string? _category;
-    private ILogger? _log;
+    public new ComputedSourceComputed<T> Computed { get; }
+}
+
+public abstract class ComputedSource : ComputedInput, IComputedSource
+{
+    private volatile Func<ComputedSource, CancellationToken, Task> _computer;
+    private volatile Computed _computed;
+
+    [field: AllowNull, MaybeNull]
+    protected Func<Task, object?> GetUntypedTaskResultSynchronously =>
+        field ??= GenericInstanceCache.Get<Func<Task, object?>>(
+            typeof(TaskExt.GetUntypedResultSynchronouslyFactory<>), OutputType);
 
     protected AsyncLock AsyncLock { get; }
     protected object Lock => AsyncLock;
-    protected ILogger Log => _log ??= Services.LogFor(GetType());
+    [field: AllowNull, MaybeNull]
+    protected ILogger Log => field ??= Services.LogFor(GetType());
 
     public IServiceProvider Services { get; }
 
+    [field: AllowNull, MaybeNull]
     public override string Category {
-        get => _category ??= GetType().GetName();
-        init => _category = value;
+        get => field ??= GetType().GetName();
+        init;
     }
 
     public ComputedOptions ComputedOptions { get; init; }
-    public Func<ComputedSource<T>, CancellationToken, ValueTask<T>> Computer
-        => _computer ?? throw new ObjectDisposedException(ToString());
-    public event Action<ComputedSourceComputed<T>>? Invalidated;
-    public event Action<ComputedSourceComputed<T>>? Updated;
+    public abstract Type OutputType { get; }
 
-    Computed IComputedSource.Computed => Computed;
-    public ComputedSourceComputed<T> Computed {
+    public Func<ComputedSource, CancellationToken, Task> Computer
+        => _computer ?? throw new ObjectDisposedException(ToString());
+
+    public Computed Computed {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _computed;
         private set {
@@ -56,28 +68,26 @@ public class ComputedSource<T> : ComputedInput,
         }
     }
 
-    public ComputedSource(
-        IServiceProvider services,
-        Func<ComputedSource<T>, CancellationToken, ValueTask<T>> computer,
-        string? category = null)
-        : this(services, default, computer, category)
-    { }
+    public event Action<Computed>? Invalidated;
+    public event Action<Computed>? Updated;
 
-    public ComputedSource(
+    protected ComputedSource(
         IServiceProvider services,
-        Result<T> initialOutput,
-        Func<ComputedSource<T>, CancellationToken, ValueTask<T>> computer,
+        Func<ComputedSource, CancellationToken, Task> computer,
+        Result initialOutput,
         string? category = null)
     {
         Services = services;
         _computer = computer;
-        _category = category;
+        // ReSharper disable once VirtualMemberCallInConstructor
+        Category = category!;
 
         ComputedOptions = ComputedOptions.Default;
         AsyncLock = new AsyncLock(LockReentryMode.CheckedFail);
         Initialize(this, RuntimeHelpers.GetHashCode(this));
         lock (Lock)
-            _computed = new ComputedSourceComputed<T>(ComputedOptions, this, initialOutput, false);
+            // ReSharper disable once VirtualMemberCallInConstructor
+            _computed = CreateComputed(initialOutput);
     }
 
     // ComputedInput
@@ -90,18 +100,16 @@ public class ComputedSource<T> : ComputedInput,
 
     // Equality
 
-    public bool Equals(ComputedSource<T>? other)
-        => ReferenceEquals(this, other);
     public override bool Equals(ComputedInput? other)
         => ReferenceEquals(this, other);
     public override bool Equals(object? other)
         => ReferenceEquals(this, other);
 
-    // IFunction<T> & IFunction
+    // IComputedFunction
 
     FusionHub IComputeFunction.Hub => Services.GetRequiredService<FusionHub>();
 
-    ValueTask<Computed<T>> IComputeFunction<T>.Invoke(
+    Task<Computed> IComputeFunction.ProduceComputed(
         ComputedInput input,
         ComputeContext context,
         CancellationToken cancellationToken)
@@ -110,85 +118,47 @@ public class ComputedSource<T> : ComputedInput,
             // This "Function" supports just a single input == this
             throw new ArgumentOutOfRangeException(nameof(input));
 
-        return Invoke(context, cancellationToken);
+        return ProduceComputed(context, cancellationToken);
     }
 
-    private async ValueTask<Computed<T>> Invoke(
+    // Protected methods
+
+    protected abstract Computed CreateComputed(Result? initialOutput = null);
+
+    protected async Task<Computed> ProduceComputed(
         ComputeContext context,
         CancellationToken cancellationToken)
     {
-        var computed = Computed;
-        if (ComputedImpl.TryUseExisting(computed, context))
-            return computed!;
-
         using var releaser = await AsyncLock.Lock(cancellationToken).ConfigureAwait(false);
 
-        computed = Computed;
+        var computed = Computed;
         if (ComputedImpl.TryUseExistingFromLock(computed, context))
             return computed!;
 
         releaser.MarkLockedLocally();
-        computed = await GetComputed(cancellationToken).ConfigureAwait(false);
+        computed = await ProduceComputedFromLock(cancellationToken).ConfigureAwait(false);
         ComputedImpl.UseNew(computed, context);
         return computed;
     }
 
-    Task<T> IComputeFunction<T>.InvokeAndStrip(
-        ComputedInput input,
-        ComputeContext context,
-        CancellationToken cancellationToken)
+    protected async Task<Computed> ProduceComputedFromLock(CancellationToken cancellationToken)
     {
-        if (!ReferenceEquals(input, this))
-            // This "Function" supports just a single input == this
-            throw new ArgumentOutOfRangeException(nameof(input));
-
-        return InvokeAndStrip(context, cancellationToken);
-    }
-
-    private Task<T> InvokeAndStrip(
-        ComputeContext context,
-        CancellationToken cancellationToken)
-    {
-        var result = Computed;
-        return ComputedImpl.TryUseExisting(result, context)
-            ? ComputedImpl.StripToTask(result, context)
-            : TryRecompute(context, cancellationToken);
-    }
-
-    // Private methods
-
-    private async Task<T> TryRecompute(
-        ComputeContext context,
-        CancellationToken cancellationToken)
-    {
-        using var releaser = await AsyncLock.Lock(cancellationToken).ConfigureAwait(false);
-
-        var computed = Computed;
-        if (ComputedImpl.TryUseExistingFromLock(computed, context))
-            return ComputedImpl.Strip(computed, context);
-
-        releaser.MarkLockedLocally();
-        computed = await GetComputed(cancellationToken).ConfigureAwait(false);
-        ComputedImpl.UseNew(computed, context);
-        return computed.Value;
-    }
-
-    private async ValueTask<ComputedSourceComputed<T>> GetComputed(CancellationToken cancellationToken)
-    {
-        ComputedSourceComputed<T> computed;
+        Computed computed;
         var tryIndex = 0;
         var startedAt = CpuTimestamp.Now;
         while (true) {
-            Computed = computed = new ComputedSourceComputed<T>(ComputedOptions, this);
+            Computed = computed = CreateComputed();
             try {
-                using var _ = Fusion.Computed.BeginCompute(computed);
-                var value = await Computer.Invoke(this, cancellationToken).ConfigureAwait(false);
-                computed.TrySetOutput(Result.New(value));
+                using var _ = Computed.BeginCompute(computed);
+                var computeTask = Computer.Invoke(this, cancellationToken);
+                await computeTask.ConfigureAwait(false);
+                var value = GetUntypedTaskResultSynchronously(computeTask);
+                computed.TrySetValue(value);
                 break;
             }
             catch (Exception e) {
                 var delayTask = ComputedImpl.FinalizeAndTryReprocessInternalCancellation(
-                    nameof(GetComputed), computed, e, startedAt, ref tryIndex, Log, cancellationToken);
+                    nameof(ProduceComputedFromLock), computed, e, startedAt, ref tryIndex, Log, cancellationToken);
                 if (delayTask == SpecialTasks.MustThrow)
                     throw;
                 if (delayTask == SpecialTasks.MustReturn)
@@ -199,7 +169,7 @@ public class ComputedSource<T> : ComputedInput,
         return computed;
     }
 
-    internal void OnInvalidated(ComputedSourceComputed<T> computed)
+    internal void OnInvalidated(Computed computed)
     {
         try {
             Invalidated?.Invoke(computed);
@@ -208,4 +178,35 @@ public class ComputedSource<T> : ComputedInput,
             Log.LogError(e, "Invalidated handler failed for {Category}", Category);
         }
     }
+}
+
+public sealed class ComputedSource<T> : ComputedSource, IComputedSource<T>
+{
+    public override Type OutputType => typeof(T);
+
+    public new ComputedSourceComputed<T> Computed {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (ComputedSourceComputed<T>)base.Computed;
+    }
+
+    public ComputedSource(
+        IServiceProvider services,
+        Func<ComputedSource, CancellationToken, Task<T>> computer,
+        string? category = null)
+        : this(services, default, computer, category)
+    { }
+
+    // ReSharper disable once ConvertToPrimaryConstructor
+    public ComputedSource(
+        IServiceProvider services,
+        Result<T> initialOutput,
+        Func<ComputedSource, CancellationToken, Task<T>> computer,
+        string? category = null)
+        : base(services, computer, initialOutput.ToUntypedResult(), category)
+    { }
+
+    protected override Computed CreateComputed(Result? initialOutput = null)
+        => initialOutput.HasValue
+            ? new ComputedSourceComputed<T>(ComputedOptions, this, initialOutput.GetValueOrDefault(), false)
+            : new ComputedSourceComputed<T>(ComputedOptions, this);
 }

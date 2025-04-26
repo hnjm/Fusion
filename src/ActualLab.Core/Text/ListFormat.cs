@@ -19,7 +19,7 @@ public readonly struct ListFormat(char delimiter, char escape = '\\')
     public ListParser CreateParser(ReadOnlySpan<char> source, int itemIndex = 0)
         => new(this, source, itemIndex);
 
-    public string Format(params string[] source)
+    public string Format(params ReadOnlySpan<string> source)
     {
         using var f = CreateFormatter();
         foreach (var item in source)
@@ -46,7 +46,7 @@ public readonly struct ListFormat(char delimiter, char escape = '\\')
         return target;
     }
 
-    public List<string> Parse(in ReadOnlySpan<char> source, List<string>? target = null)
+    public List<string> Parse(ReadOnlySpan<char> source, List<string>? target = null)
     {
         target ??= new List<string>();
         using var p = CreateParser(source);

@@ -4,24 +4,28 @@ namespace ActualLab.Collections;
 
 public interface IReadOnlyMutableList<T> : IReadOnlyCollection<T>
 {
-    ImmutableList<T> Items { get; }
-    event Action? Changed;
+    public ImmutableList<T> Items { get; }
+    public event Action? Changed;
 }
 
 // ReSharper disable once PossibleInterfaceMemberAmbiguity
 public interface IMutableList<T> : IReadOnlyMutableList<T>, IList<T>
 {
-    new ImmutableList<T> Items { get; set; }
+    public new ImmutableList<T> Items { get; set; }
 
-    bool Update(ImmutableList<T> items);
-    bool Update(ImmutableList<T> items, ImmutableList<T> expectedItems);
-    bool Update(Func<ImmutableList<T>, ImmutableList<T>> updater);
-    bool Update<TState>(TState state, Func<TState, ImmutableList<T>, ImmutableList<T>> updater);
+    public bool Update(ImmutableList<T> items);
+    public bool Update(ImmutableList<T> items, ImmutableList<T> expectedItems);
+    public bool Update(Func<ImmutableList<T>, ImmutableList<T>> updater);
+    public bool Update<TState>(TState state, Func<TState, ImmutableList<T>, ImmutableList<T>> updater);
 }
 
 public class MutableList<T>(ImmutableList<T> items) : IMutableList<T>
 {
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
     private readonly object _lock = new();
+#endif
     private volatile ImmutableList<T> _items = items;
 
     public ImmutableList<T> Items {

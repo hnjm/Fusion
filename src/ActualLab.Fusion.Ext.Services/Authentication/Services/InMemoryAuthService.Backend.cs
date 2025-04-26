@@ -21,7 +21,7 @@ public partial class InMemoryAuthService
         if (Invalidation.IsActive) {
             _ = GetSessionInfo(session, default); // Must go first!
             _ = GetAuthInfo(session, default);
-            var invSessionInfo = context.Operation.Items.Get<SessionInfo>();
+            var invSessionInfo = context.Operation.Items.KeylessGet<SessionInfo>();
             if (invSessionInfo != null) {
                 _ = GetUser(shard, invSessionInfo.UserId, default);
                 _ = GetUserSessions(shard, invSessionInfo.UserId, default);
@@ -44,12 +44,12 @@ public partial class InMemoryAuthService
         var isNewUser = false;
 
         // First, let's validate user.Id
-        if (!user.Id.IsEmpty)
+        if (!user.Id.IsNullOrEmpty())
             _ = long.Parse(user.Id, NumberStyles.Integer, CultureInfo.InvariantCulture);
 
         // And find the existing user
         var existingUser = GetByUserIdentity(shard, authenticatedIdentity);
-        if (existingUser == null && !user.Id.IsEmpty)
+        if (existingUser == null && !user.Id.IsNullOrEmpty())
             existingUser = Users.GetValueOrDefault((shard, user.Id));
 
         if (existingUser != null) {
@@ -58,7 +58,7 @@ public partial class InMemoryAuthService
         }
         else {
             // Otherwise, create a new one
-            if (user.Id.IsEmpty)
+            if (user.Id.IsNullOrEmpty())
                 user = user with { Id = GetNextUserId() };
             isNewUser = true;
         }
@@ -77,8 +77,8 @@ public partial class InMemoryAuthService
         // Persist changes
         Users[(shard, user.Id)] = user;
         sessionInfo = UpsertSessionInfo(shard, session.Id, sessionInfo, sessionInfo.Version);
-        context.Operation.Items.Set(sessionInfo);
-        context.Operation.Items.Set(isNewUser);
+        context.Operation.Items.KeylessSet(sessionInfo);
+        context.Operation.Items.KeylessSet(isNewUser);
         return Task.CompletedTask;
     }
 
@@ -93,10 +93,10 @@ public partial class InMemoryAuthService
 
         if (Invalidation.IsActive) {
             _ = GetSessionInfo(session, default); // Must go first!
-            var invIsNew = context.Operation.Items.GetOrDefault<bool>();
+            var invIsNew = context.Operation.Items.KeylessGet<bool>();
             if (invIsNew)
                 _ = GetAuthInfo(session, default);
-            var invSessionInfo = context.Operation.Items.Get<SessionInfo>();
+            var invSessionInfo = context.Operation.Items.KeylessGet<SessionInfo>();
             if (invSessionInfo?.IsAuthenticated() ?? false)
                 _ = GetUserSessions(shard, invSessionInfo.UserId, default);
             return Task.FromResult<SessionInfo>(null!);
@@ -104,7 +104,7 @@ public partial class InMemoryAuthService
 
         InMemoryOperationScope.Require();
         var sessionInfo = SessionInfos.GetValueOrDefault((shard, session.Id));
-        context.Operation.Items.Set(sessionInfo == null); // invIsNew
+        context.Operation.Items.KeylessSet(sessionInfo == null); // invIsNew
         sessionInfo ??= new SessionInfo(session, Clocks.SystemClock.Now);
         sessionInfo = sessionInfo with {
             IPAddress = ipAddress.IsNullOrEmpty() ? sessionInfo.IPAddress : ipAddress,
@@ -112,7 +112,7 @@ public partial class InMemoryAuthService
             Options = options.SetMany(sessionInfo.Options),
         };
         sessionInfo = UpsertSessionInfo(shard, session.Id, sessionInfo, sessionInfo.Version);
-        context.Operation.Items.Set(sessionInfo); // invSessionInfo
+        context.Operation.Items.KeylessSet(sessionInfo); // invSessionInfo
         return Task.FromResult(sessionInfo);
     }
 
@@ -143,25 +143,27 @@ public partial class InMemoryAuthService
     // Compute methods
 
     // [ComputeMethod] inherited
-    public virtual Task<User?> GetUser(DbShard shard, Symbol userId, CancellationToken cancellationToken = default)
+    public virtual Task<User?> GetUser(string shard, string userId, CancellationToken cancellationToken = default)
         => Task.FromResult(Users.GetValueOrDefault((shard, userId)))!;
 
     // Protected methods
 
-    protected virtual Task<ImmutableArray<(Symbol Id, SessionInfo SessionInfo)>> GetUserSessions(
-        DbShard shard, Symbol userId, CancellationToken cancellationToken = default)
+    protected virtual Task<ImmutableArray<(string Id, SessionInfo SessionInfo)>> GetUserSessions(
+        string shard, string userId, CancellationToken cancellationToken = default)
     {
-        if (userId.IsEmpty)
-            return Task.FromResult(ImmutableArray<(Symbol Id, SessionInfo SessionInfo)>.Empty);
+        if (userId.IsNullOrEmpty())
+            return Task.FromResult(ImmutableArray<(string Id, SessionInfo SessionInfo)>.Empty);
+
         var result = SessionInfos
-            .Where(kv => kv.Key.Shard == shard && kv.Value.UserId == userId)
+            .Where(kv => string.Equals(kv.Key.Shard, shard, StringComparison.Ordinal)
+                && string.Equals(kv.Value.UserId, userId, StringComparison.Ordinal))
             .OrderByDescending(kv => kv.Value.LastSeenAt)
             .Select(kv => (kv.Key.SessionId, kv.Value))
             .ToImmutableArray();
         return Task.FromResult(result);
     }
 
-    protected virtual SessionInfo UpsertSessionInfo(DbShard shard, Symbol sessionId, SessionInfo sessionInfo, long? expectedVersion)
+    protected virtual SessionInfo UpsertSessionInfo(string shard, string sessionId, SessionInfo sessionInfo, long? expectedVersion)
     {
         sessionInfo = sessionInfo with {
             Version = VersionGenerator.NextVersion(expectedVersion ?? sessionInfo.Version),
@@ -208,15 +210,16 @@ public partial class InMemoryAuthService
         return SessionInfos.GetValueOrDefault((shard, sessionId)) ?? sessionInfo;
     }
 
-    protected virtual User? GetByUserIdentity(DbShard shard, UserIdentity userIdentity)
+    protected virtual User? GetByUserIdentity(string shard, UserIdentity userIdentity)
         => userIdentity.IsValid
-            ? Users.FirstOrDefault(kv => kv.Key.Shard == shard && kv.Value.Identities.ContainsKey(userIdentity)).Value
+            ? Users.FirstOrDefault(kv => string.Equals(kv.Key.Shard, shard, StringComparison.Ordinal)
+                && kv.Value.Identities.ContainsKey(userIdentity)).Value
             : null;
 
     protected virtual User MergeUsers(User existingUser, User user)
         => existingUser with {
-            Claims = existingUser.Claims.With(user.Claims), // Add + replace claims
-            Identities = existingUser.Identities.With(user.Identities), // Add + replace identities
+            Claims = existingUser.Claims.WithMany(user.Claims), // Add + replace claims
+            Identities = existingUser.Identities.WithMany(user.Identities), // Add + replace identities
         };
 
     protected string GetNextUserId()

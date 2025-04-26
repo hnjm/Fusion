@@ -5,8 +5,10 @@ using ActualLab.Rpc.Caching;
 using ActualLab.Rpc.Clients;
 using ActualLab.Rpc.Diagnostics;
 using ActualLab.Rpc.Infrastructure;
-using ActualLab.Rpc.Internal;
 using ActualLab.Rpc.Serialization;
+using ActualLab.Rpc.Testing;
+using ActualLab.Rpc.Trimming;
+using ActualLab.Trimming;
 
 namespace ActualLab.Rpc;
 
@@ -16,34 +18,55 @@ public readonly struct RpcBuilder
     public RpcConfiguration Configuration { get; }
     public RpcServiceMode DefaultServiceMode { get; }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Proxies))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcDefaultDelegates))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcMethodDef))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcServiceDef))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcServiceRegistry))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcConfiguration))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcByteArgumentSerializer))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcDefaultCallTracer))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcRoutingInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcSwitchInterceptor))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcInboundContext))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcInboundContextFactory))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcOutboundContext))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcInboundCall<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcInbound404Call<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcOutboundCall<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcMiddlewares<>))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcInboundMiddleware))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcOutboundMiddleware))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcServerPeer))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcClientPeer))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcHub))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcRemoteObjectTracker))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcSharedObjectTracker))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcSharedStream))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcCacheInfoCapture))]
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RpcSystemCalls))]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "CodeKeepers are used only to retain the code")]
+    [UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "CodeKeepers are used only to retain the code")]
+    static RpcBuilder() => CodeKeeper.AddFakeAction(
+        static () => {
+            CodeKeeper.KeepStatic(typeof(Proxies));
+            CodeKeeper.KeepStatic(typeof(RpcDefaultDelegates));
+
+            // Serializable types
+            CodeKeeper.KeepSerializable<TypeRef>();
+
+            // Interceptors
+            CodeKeeper.Keep<RpcProxyCodeKeeper>();
+            CodeKeeper.Keep<RpcNonRoutingInterceptor>();
+            CodeKeeper.Keep<RpcRoutingInterceptor>();
+            CodeKeeper.Keep<RpcSwitchInterceptor>();
+
+            // Configuration
+            CodeKeeper.Keep<RpcMethodDef>();
+            CodeKeeper.Keep<RpcServiceDef>();
+            CodeKeeper.Keep<RpcServiceRegistry>();
+            CodeKeeper.Keep<RpcConfiguration>();
+            CodeKeeper.Keep<RpcSerializationFormat>();
+            CodeKeeper.Keep<RpcSerializationFormatResolver>();
+            CodeKeeper.Keep<RpcByteArgumentSerializerV2>();
+            CodeKeeper.Keep<RpcByteArgumentSerializerV1>();
+            CodeKeeper.Keep<RpcByteMessageSerializer>();
+            CodeKeeper.Keep<RpcDefaultCallTracer>();
+
+            // Per-hub
+            CodeKeeper.Keep<RpcHub>();
+            CodeKeeper.Keep<RpcSystemCalls>();
+            CodeKeeper.Keep<RpcInboundMiddlewares>();
+            CodeKeeper.Keep<RpcOutboundMiddlewares>();
+            CodeKeeper.Keep<RpcRandomDelayMiddleware>();
+
+            // Per-peer
+            CodeKeeper.Keep<RpcClientPeer>();
+            CodeKeeper.Keep<RpcServerPeer>();
+            CodeKeeper.Keep<RpcRemoteObjectTracker>();
+            CodeKeeper.Keep<RpcSharedObjectTracker>();
+            CodeKeeper.Keep<RpcSharedStream>();
+
+            // Per-call
+            CodeKeeper.Keep<RpcInboundContext>();
+            CodeKeeper.Keep<RpcInboundContextFactory>();
+            CodeKeeper.Keep<RpcOutboundContext>();
+            CodeKeeper.Keep<RpcCacheInfoCapture>();
+        });
+
     internal RpcBuilder(
         IServiceCollection services,
         Action<RpcBuilder>? configure,
@@ -75,6 +98,7 @@ public readonly struct RpcBuilder
         // Core services
         services.AddSingleton(c => new RpcHub(c));
         services.AddSingleton(c => new RpcServiceRegistry(c));
+        services.AddSingleton(_ => RpcSerializationFormatResolver.Default);
         services.AddSingleton(_ => RpcDefaultDelegates.ServiceDefBuilder);
         services.AddSingleton(_ => RpcDefaultDelegates.MethodDefBuilder);
         services.AddSingleton(_ => RpcDefaultDelegates.BackendServiceDetector);
@@ -94,7 +118,6 @@ public readonly struct RpcBuilder
         services.AddSingleton(_ => RpcDefaultDelegates.CallTracerFactory);
         services.AddSingleton(_ => RpcDefaultDelegates.CallLoggerFactory);
         services.AddSingleton(_ => RpcDefaultDelegates.CallLoggerFilter);
-        services.AddSingleton(_ => RpcArgumentSerializer.Default);
         services.AddSingleton(c => new RpcSafeCallRouter(c));
         services.AddSingleton(c => new RpcInboundMiddlewares(c));
         services.AddSingleton(c => new RpcOutboundMiddlewares(c));
@@ -113,6 +136,8 @@ public readonly struct RpcBuilder
             AddClient<IRpcSystemCalls>(RpcSystemCalls.Name);
             Service<IRpcSystemCalls>().HasServer<RpcSystemCalls>();
         }
+
+        configure?.Invoke(this);
     }
 
     // WebSocket client
@@ -143,30 +168,26 @@ public readonly struct RpcBuilder
 
     // AddService & its specific variants
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddService<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService>
-        (RpcServiceMode mode = default, Symbol name = default)
+        (RpcServiceMode mode = default, string name = "")
         where TService : class
         => AddService(typeof(TService), mode, name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddService<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (RpcServiceMode mode = default, Symbol name = default)
+        (RpcServiceMode mode = default, string name = "")
         where TService : class
         where TImplementation : class, TService
         => AddService(typeof(TService), typeof(TImplementation), mode, name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
-        RpcServiceMode mode = default, Symbol name = default)
+        RpcServiceMode mode = default, string name = "")
         => AddService(serviceType, serviceType, mode, name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        RpcServiceMode mode = default, Symbol name = default)
+        RpcServiceMode mode = default, string name = "")
     {
         mode = mode.Or(DefaultServiceMode);
         return mode switch {
@@ -179,30 +200,26 @@ public readonly struct RpcBuilder
         };
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddClient<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService>
-        (Symbol name = default)
+        (string name = "")
         where TService : class
         => AddClient(typeof(TService), typeof(TService), name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddClient<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TProxyBase>
-        (Symbol name = default)
+        (string name = "")
         where TService : class
         where TProxyBase : class, TService
         => AddClient(typeof(TService), typeof(TProxyBase), name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddClient(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
-        Symbol name = default)
+        string name = "")
         => AddClient(serviceType, serviceType, name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddClient(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type proxyBaseType,
-        Symbol name = default)
+        string name = "")
     {
         // DI container:
         // - TProxyBaseType is a singleton RPC client for TService
@@ -263,24 +280,24 @@ public readonly struct RpcBuilder
 
     public RpcBuilder AddServer<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService>
-        (Symbol name = default)
+        (string name = "")
         where TService : class
         => AddServer(typeof(TService), name);
     public RpcBuilder AddServer<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (Symbol name = default)
+        (string name = "")
         where TService : class
         where TImplementation : class, TService
         => AddServer(typeof(TService), typeof(TImplementation), name);
     public RpcBuilder AddServer(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
-        Symbol name = default)
+        string name = "")
         => AddServer(serviceType, serviceType, name);
     public RpcBuilder AddServer(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        Symbol name = default)
+        string name = "")
     {
         // DI container:
         // - TImplementation is a singleton
@@ -293,19 +310,17 @@ public readonly struct RpcBuilder
         return this;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddDistributedService<
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (Symbol name = default)
+        (string name = "")
         where TService : class
         where TImplementation : class, TService
         => AddDistributedService(typeof(TService), typeof(TImplementation), name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddDistributedService(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        Symbol name = default)
+        string name = "")
     {
         // DI container:
         // - TService is a singleton mapped to a hybrid proxy extending TImplementation,
@@ -328,19 +343,17 @@ public readonly struct RpcBuilder
         return this;
     }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddDistributedServicePair<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TService,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TImplementation>
-        (Symbol name = default)
+        (string name = "")
         where TService : class
         where TImplementation : class, TService
         => AddDistributedServicePair(typeof(TService), typeof(TImplementation), name);
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcBuilder AddDistributedServicePair(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type implementationType,
-        Symbol name = default)
+        string name = "")
     {
         // DI container:
         // - TImplementation is a singleton

@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Docs</AssemblyName>
+    <RootNamespace>Docs</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\ActualLab.Fusion.Server\ActualLab.Fusion.Server.csproj" />
+  </ItemGroup>
+
+  <!-- Roslyn generators/analyzers -->
+  <ItemGroup>
+    <ProjectReference Include="..\src\ActualLab.Generators\ActualLab.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="MemoryPack.Generator" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

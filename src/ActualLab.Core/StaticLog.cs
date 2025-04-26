@@ -1,15 +1,21 @@
+using ActualLab.OS;
+
 namespace ActualLab;
 
 public static class StaticLog
 {
-    private static readonly object Lock = new();
-    private static readonly ConcurrentDictionary<object, ILogger> Cache = new();
+#if NET9_0_OR_GREATER
+    private static readonly Lock StaticLock = new();
+#else
+    private static readonly object StaticLock = new();
+#endif
+    private static readonly ConcurrentDictionary<object, ILogger> Cache = new(HardwareInfo.ProcessorCountPo2, 131);
     private static volatile ILoggerFactory _factory = NullLoggerFactory.Instance;
 
     public static ILoggerFactory Factory {
         get => _factory;
         set {
-            lock (Lock) {
+            lock (StaticLock) {
                 if (ReferenceEquals(Factory, value))
                     return;
 
@@ -21,7 +27,7 @@ public static class StaticLog
 
     public static ILogger<T> For<T>()
         => (ILogger<T>)Cache.GetOrAdd(typeof(T),
-            static key => (ILogger)typeof(Logger<>).MakeGenericType((Type)key).CreateInstance(Factory));
+            static _ => new Logger<T>(Factory)); // See ILoggerFactory.CreateLogger<T>()
 
     public static ILogger For(Type type)
         => Cache.GetOrAdd(type.NonProxyType(),

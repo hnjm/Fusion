@@ -1,8 +1,9 @@
 using System.Globalization;
+using MessagePack;
 
 namespace ActualLab.Api;
 
-[DataContract, MemoryPackable(GenerateType.Collection)]
+[DataContract, MemoryPackable(GenerateType.Collection), MessagePackObject]
 public sealed partial class ApiMap<TKey, TValue>
     : Dictionary<TKey, TValue>, IEnumerable<KeyValuePair<TKey, TValue>>
     where TKey : notnull
@@ -11,9 +12,9 @@ public sealed partial class ApiMap<TKey, TValue>
 
     private SortedItemCache? _sortedItemCache;
 
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public UnorderedItemEnumerable UnorderedItems => new(this);
-    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore]
+    [JsonIgnore, Newtonsoft.Json.JsonIgnore, IgnoreDataMember, MemoryPackIgnore, IgnoreMember]
     public bool IsEmpty => Count == 0;
 
     public ApiMap() { }
@@ -62,7 +63,7 @@ public sealed partial class ApiMap<TKey, TValue>
         return newMap;
     }
 
-    public ApiMap<TKey, TValue> With(params KeyValuePair<TKey, TValue>[] pairs)
+    public ApiMap<TKey, TValue> WithMany(params ReadOnlySpan<KeyValuePair<TKey, TValue>> pairs)
     {
         var newMap = Clone();
         foreach (var (key, value) in pairs)
@@ -70,7 +71,7 @@ public sealed partial class ApiMap<TKey, TValue>
         return newMap;
     }
 
-    public ApiMap<TKey, TValue> With(IEnumerable<KeyValuePair<TKey, TValue>> pairs)
+    public ApiMap<TKey, TValue> WithMany(IEnumerable<KeyValuePair<TKey, TValue>> pairs)
     {
         var newMap = Clone();
         foreach (var (key, value) in pairs)
@@ -85,7 +86,7 @@ public sealed partial class ApiMap<TKey, TValue>
         return newMap;
     }
 
-    public ApiMap<TKey, TValue> Without(params TKey[] keys)
+    public ApiMap<TKey, TValue> WithoutMany(params ReadOnlySpan<TKey> keys)
     {
         var newMap = Clone();
         foreach (var key in keys)
@@ -93,7 +94,7 @@ public sealed partial class ApiMap<TKey, TValue>
         return newMap;
     }
 
-    public ApiMap<TKey, TValue> Without(IEnumerable<TKey> keys)
+    public ApiMap<TKey, TValue> WithoutMany(IEnumerable<TKey> keys)
     {
         var newMap = Clone();
         foreach (var key in keys)

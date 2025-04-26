@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using ActualLab.Fusion.Authentication;
 
 namespace ActualLab.Fusion.Server.Internal;
 
@@ -25,7 +24,7 @@ public class SessionModelBinder : IModelBinder
 
         try {
             var sValue = bindingContext.ValueProvider.GetValue(bindingContext.ModelName).FirstValue ?? "";
-            if (sValue.IsNullOrEmpty() || string.Equals(sValue, Session.Default.Id.Value, StringComparison.Ordinal))
+            if (sValue.IsNullOrEmpty() || string.Equals(sValue, Session.Default.Id, StringComparison.Ordinal))
                 return UseDefaultSession();
             bindingContext.Result = ModelBindingResult.Success(new Session(sValue));
             return Task.CompletedTask;

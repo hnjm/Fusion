@@ -21,7 +21,11 @@ public sealed class AuthStateProvider : AuthenticationStateProvider, IDisposable
         }
     };
 
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
     private readonly object _lock = new();
+#endif
     private Session? _session;
     private volatile Task<AuthState> _authStateTask;
     private volatile Task<AuthenticationState> _authenticationStateTask;
@@ -72,13 +76,14 @@ public sealed class AuthStateProvider : AuthenticationStateProvider, IDisposable
         return new AuthState(user, isSignOutForced);
     }
 
-    private void OnStateChanged(IState<AuthState> state, StateEventKind eventKind)
+    private void OnStateChanged(State state, StateEventKind eventKind)
         => _ = Task.Run(() => {
+            var typedState = (IState<AuthState>)state;
             Task<AuthState> authStateTask;
             Task<AuthenticationState> authenticationStateTask;
             lock (_lock) {
-                var authState = state.LastNonErrorValue;
-                var oldAuthState = _authStateTask.Result;
+                var authState = typedState.LastNonErrorValue;
+                var oldAuthState = _authStateTask.GetAwaiter().GetResult();
                 if (authState.IsIdenticalTo(oldAuthState))
                     return;
 

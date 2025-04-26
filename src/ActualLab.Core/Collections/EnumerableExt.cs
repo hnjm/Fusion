@@ -14,29 +14,34 @@ public static class EnumerableExt
     {
         if (sequences.Length == 0)
             return Enumerable.Empty<T>();
+
         var result = sequences[0];
         for (var i = 1; i < sequences.Length; i++)
             result = result.Concat(sequences[i]);
         return result;
     }
 
-    public static T[] ToArray<T>(this IEnumerable<T> source, int length)
+    public static T[] ToArrayOfKnownLength<T>(this IEnumerable<T> source, int length)
     {
         var result = new T[length];
         var i = 0;
         foreach (var item in source)
             result[i++] = item;
-        return result;
+        return i == length
+            ? result
+            : throw new ArgumentOutOfRangeException(nameof(length));
     }
 
-    public static TTarget[] ToArray<TSource, TTarget>(
+    public static TTarget[] ToArrayOfKnownLength<TSource, TTarget>(
         this IEnumerable<TSource> source, int length, Func<TSource, TTarget> selector)
     {
         var result = new TTarget[length];
         var i = 0;
         foreach (var item in source)
             result[i++] = selector.Invoke(item);
-        return result;
+        return i == length
+            ? result
+            : throw new ArgumentOutOfRangeException(nameof(length));
     }
 
     // SkipNullItems

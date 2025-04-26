@@ -1,23 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks Condition="$(UseMultitargeting)">net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;netstandard2.1;netstandard2.0</TargetFrameworks>
-    <TargetFramework Condition="!$(UseMultitargeting)">net8.0</TargetFramework>
+    <TargetFrameworks Condition="$(UseMultitargeting)">net9.0;net8.0;net7.0;net6.0;net5.0;netcoreapp3.1;netstandard2.1;netstandard2.0</TargetFrameworks>
     <PackageTags>actual_chat actual_lab actual_lab_fusion ef</PackageTags>
     <Description>ActualLab.Fusion.EntityFramework - Fusion services utilizing EF Core.</Description>
     <IsServerSideOnly>true</IsServerSideOnly>
   </PropertyGroup>
 
+  <!-- Suppressed warnings -->
+  <PropertyGroup>
+    <!-- EF packages are server-side only, so we can safely suppress all trimming-related warnings -->
+    <!-- IL2060: Call to 'Method' cannot be statically analyzed -->
+    <!-- IL2111: Method 'Method' with parameters or return value with `DynamicallyAccessedMembersAttribute` is accessed via reflection. Trimmer can't guarantee availability of the requirements of the method. -->
+    <NoWarn>$(NoWarn);IL2060;IL2111</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Ulid" />
   </ItemGroup>
 
   <ItemGroup Condition="!$(TargetFramework.StartsWith('netstandard2.0'))">
-    <PackageReference Include="MemoryPack.Generator" />
+    <PackageReference Include="MemoryPack.Generator" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net9'))">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net8'))">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" VersionOverride="$(EntityFrameworkCoreVersion8)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" VersionOverride="$(EntityFrameworkCoreVersion8)" />
+  </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.StartsWith('net7'))">
     <PackageReference Include="Microsoft.EntityFrameworkCore" VersionOverride="$(EntityFrameworkCoreVersion7)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" VersionOverride="$(EntityFrameworkCoreVersion7)" />

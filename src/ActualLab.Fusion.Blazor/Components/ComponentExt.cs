@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection.Emit;
 using Microsoft.AspNetCore.Components;
@@ -45,8 +46,8 @@ public static class ComponentExt
 #endif
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ComponentInfo GetComponentInfo(this ComponentBase component)
-        => ComponentInfo.Get(component.GetType());
+    public static RenderHandle GetRenderHandle(this ComponentBase component)
+        => RenderHandleGetter(component);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Dispatcher GetDispatcher(this ComponentBase component)
@@ -98,6 +99,9 @@ public static class ComponentExt
     }
 
 #if !(USE_UNSAFE_ACCESSORS && NET8_0_OR_GREATER)
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See DynamicDependency below")]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ComponentBase))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(RenderHandle))]
     static ComponentExt()
     {
         var bfInstanceNonPublic = BindingFlags.Instance | BindingFlags.NonPublic;

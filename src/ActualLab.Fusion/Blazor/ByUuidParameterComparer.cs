@@ -2,6 +2,8 @@ namespace ActualLab.Fusion.Blazor;
 
 public sealed class ByUuidParameterComparer : ParameterComparer
 {
+    public static ByUuidParameterComparer Instance { get; } = new();
+
     public override bool AreEqual(object? oldValue, object? newValue)
     {
         if (ReferenceEquals(oldValue, newValue))
@@ -13,6 +15,6 @@ public sealed class ByUuidParameterComparer : ParameterComparer
 
         var oldUuid = ((IHasUuid)oldValue).Uuid;
         var newUuid = ((IHasUuid)newValue).Uuid;
-        return oldUuid == newUuid;
+        return string.Equals(oldUuid, newUuid, StringComparison.Ordinal);
     }
 }

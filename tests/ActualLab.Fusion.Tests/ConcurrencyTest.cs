@@ -35,7 +35,8 @@ public class ConcurrencyTest(ITestOutputHelper @out) : SimpleFusionTestBase(@out
             var ms1 = factory.NewMutable(0);
             var ms2 = factory.NewMutable(2);
             var computedStates = Enumerable.Range(0, HardwareInfo.GetProcessorCountFactor(2))
-                .Select(_ => factory.NewComputed<int>(
+                .Select(_ => factory.NewComputed(
+                    // ReSharper disable once AccessToModifiedClosure
                     updateDelayer,
                     async ct => {
                         var m1 = await ms1.Use(ct).ConfigureAwait(false);
@@ -44,7 +45,7 @@ public class ConcurrencyTest(ITestOutputHelper @out) : SimpleFusionTestBase(@out
                     }))
                 .ToArray();
 
-            async Task Mutator(IMutableState<int> ms) {
+            async Task Mutator(MutableState<int> ms) {
                 for (var i = 1; i <= iterationCount; i++) {
                     ms.Value = i;
                     if (i % delayFrequency == 0)
@@ -59,7 +60,7 @@ public class ConcurrencyTest(ITestOutputHelper @out) : SimpleFusionTestBase(@out
 
             foreach (var computedState in computedStates) {
                 var snapshot = computedState.Snapshot;
-                var c = snapshot.Computed;
+                var c = (Computed<int>)snapshot.Computed;
                 if (!c.IsConsistent()) {
                     Out.WriteLine($"Updating: {c}");
                     await snapshot.WhenUpdated().WaitAsync(TimeSpan.FromSeconds(1));
@@ -114,12 +115,12 @@ public class ConcurrencyTest(ITestOutputHelper @out) : SimpleFusionTestBase(@out
                             var m2 = await ms2.Use(ct).ConfigureAwait(false);
                             return m1 + m2;
                         });
-                    var reader = source.Changes(updateDelayer).LastAsync();
+                    var reader = source.Computed.Changes(updateDelayer).LastAsync();
                     return (Source: source, Reader: reader);
                 })
                 .ToArray();
 
-            async Task Mutator(IMutableState<int> ms) {
+            async Task Mutator(MutableState<int> ms) {
                 for (var i = 1; i <= iterationCount; i++) {
                     ms.Value = i;
                     if (i % delayFrequency == 0)
@@ -183,18 +184,18 @@ public class ConcurrencyTest(ITestOutputHelper @out) : SimpleFusionTestBase(@out
                     var computed = await Computed.Capture(() => counterSum.Sum(0, 1));
                     var reader = Task.Run(() => {
                          var reader1 = computed.Changes(updateDelayer).LastAsync().AsTask();
-                         var reader2 = source.Changes(updateDelayer).LastAsync().AsTask();
+                         var reader2 = source.Computed.Changes(updateDelayer).LastAsync().AsTask();
                          return Task.WhenAll(reader1, reader2);
                     });
                     return (Source: source, Computed: computed, SourceReader: reader);
                 })
                 .Collect()
-                ).ToArray();
+                ).Duplicate();
             readers.Zip(readers, (x, y) => (x, y))
                 .Any(p => !ReferenceEquals(p.x.Computed, p.y.Computed))
                 .Should().BeFalse();
 
-            async Task Mutator(IMutableState<int> ms) {
+            async Task Mutator(MutableState<int> ms) {
                 for (var i = 1; i <= iterationCount; i++) {
                     ms.Value = i;
                     if (i % delayFrequency == 0)

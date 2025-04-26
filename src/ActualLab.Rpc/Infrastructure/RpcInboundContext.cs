@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-using ActualLab.Rpc.Internal;
 using Errors = ActualLab.Rpc.Internal.Errors;
 
 namespace ActualLab.Rpc.Infrastructure;
@@ -21,12 +19,10 @@ public class RpcInboundContext
     public static RpcInboundContext GetCurrent()
         => CurrentLocal.Value ?? throw Errors.NoCurrentRpcInboundContext();
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
     public RpcInboundContext(RpcPeer peer, RpcMessage message, CancellationToken peerChangedToken)
         : this(peer, message, peerChangedToken, true)
     { }
 
-    [RequiresUnreferencedCode(UnreferencedCode.Rpc)]
 #pragma warning disable CA1068
     protected RpcInboundContext(RpcPeer peer, RpcMessage message, CancellationToken peerChangedToken, bool initializeCall)
 #pragma warning restore CA1068
@@ -44,7 +40,8 @@ public class RpcInboundContext
 
     private RpcMethodDef? GetMethodDef()
     {
-        var method = Peer.ServerMethodResolver[Message.Service, Message.Method];
+        var methodRef = Message.MethodRef;
+        var method = methodRef.Target ?? Peer.ServerMethodResolver[methodRef];
         if (method == null || method.IsSystem)
             return method;
 

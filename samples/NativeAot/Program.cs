@@ -1,25 +1,25 @@
 ﻿using System.Reflection;
-using ActualLab.CommandR;
-using ActualLab.CommandR.Configuration;
-using ActualLab.DependencyInjection;
-using ActualLab.Fusion;
-using ActualLab.Generators;
+using ActualLab.Fusion.Trimming;
 using ActualLab.Interception;
-using ActualLab.Mathematics;
-using ActualLab.Reflection;
+using ActualLab.Interception.Trimming;
 using ActualLab.Rpc;
-using ActualLab.Time;
+using ActualLab.Trimming;
 using MemoryPack;
-using Microsoft.Extensions.DependencyInjection;
-using Samples.NativeAot;
+using MessagePack;
 using static System.Console;
 
 #pragma warning disable IL3050
 
+// TestServiceProxy.KeepCode(); // A code like this this might be used to force-load assemblies with proxies
+CodeKeeper.Set<ProxyCodeKeeper, FusionProxyCodeKeeper>();
+if (RuntimeCodegen.NativeMode != RuntimeCodegenMode.DynamicMethods)
+    CodeKeeper.RunActions();
+
 WriteLine($"RuntimeCodegen.Mode: {RuntimeCodegen.Mode}");
-var l0 = ArgumentList.New().KeepCode();
-var l2 = ArgumentList.New(1, "s").KeepCode();
-var l10 = ArgumentList.New(0, 1, 2, 3, 4, 5, 6, 7, 8, 9).KeepCode();
+WriteLine($"ArgumentList.DisableGenerics: {ArgumentList.DisableGenerics}");
+var l0 = ArgumentList.New();
+var l2 = ArgumentList.New(1, "s");
+var l10 = ArgumentList.New(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
 var m0 = typeof(Invoker).GetMethod(nameof(Invoker.Format0), BindingFlags.Public | BindingFlags.Static)!;
 var m2 = typeof(Invoker).GetMethod(nameof(Invoker.Format2), BindingFlags.Public | BindingFlags.Static)!;
 var m10 = typeof(Invoker).GetMethod(nameof(Invoker.Format10), BindingFlags.Public | BindingFlags.Static)!;
@@ -27,24 +27,11 @@ WriteLine(l0.GetInvoker(m0).Invoke(null, l0));
 WriteLine(l2.GetInvoker(m2).Invoke(null, l2));
 WriteLine(l10.GetInvoker(m10).Invoke(null, l10));
 
-/*
-Type GetRandomType() => RandomShared.Next().PositiveModulo(5) switch {
-    0 => typeof(bool),
-    1 => typeof(int),
-    2 => typeof(int?),
-    3 => typeof(long),
-    _ => typeof(string),
-};
-for (var i = 0; i <= ArgumentList.MaxItemCount; i++) {
-    var tArguments = Enumerable.Range(0, i).Select(_ => GetRandomType()).ToArray();
-    var t = ArgumentListType.Get(tArguments);
-    var l = t.Factory();
-    var lengthGetter = t.ListType.GetProperty("Length")!.GetGetter();
-    WriteLine($"{lengthGetter.Invoke(l)}: {l}, {FuncExt.GetFuncType(tArguments, typeof(object)).GetName()}, {FuncExt.GetActionType(tArguments).GetName()}");
-}
-*/
-
 var services = new ServiceCollection()
+    .AddLogging(l => {
+        l.SetMinimumLevel(LogLevel.Debug);
+        l.AddSimpleConsole();
+    })
     .AddFusion(fusion => {
         fusion.AddComputeService<TestService>();
         fusion.AddClient<ITestService>(addCommandHandlers: false);
@@ -85,16 +72,16 @@ public static class Invoker
 
 public interface ITestService : IComputeService
 {
-    Task<Moment> GetTime(CancellationToken cancellationToken = default);
+    public Task<Moment> GetTime(CancellationToken cancellationToken = default);
 
     [ComputeMethod(AutoInvalidationDelay = 1)]
-    Task<Moment> GetTimeComputed(CancellationToken cancellationToken = default);
+    public Task<Moment> GetTimeComputed(CancellationToken cancellationToken = default);
 
     [CommandHandler]
-    Task<string> OnSayHello(SayHelloCommand command, CancellationToken cancellationToken = default);
+    public Task<string> OnSayHello(SayHelloCommand command, CancellationToken cancellationToken = default);
 }
 
-[MemoryPackable(GenerateType.VersionTolerant)]
+[MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 public sealed partial record SayHelloCommand(
     [property: MemoryPackOrder(0)] string Name
 ) : ICommand<string>;

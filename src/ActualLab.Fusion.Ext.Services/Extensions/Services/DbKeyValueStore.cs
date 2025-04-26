@@ -1,9 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using ActualLab.Fusion.EntityFramework;
 
 namespace ActualLab.Fusion.Extensions.Services;
 
-public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
+public class DbKeyValueStore<TDbContext,
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TDbKeyValue>(
+    IServiceProvider services)
     : DbServiceBase<TDbContext>(services), IKeyValueStore
     where TDbContext : DbContext
     where TDbKeyValue : DbKeyValue, new()
@@ -24,15 +27,13 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
             return;
         }
 
-        var dbContext = await DbHub.CreateCommandDbContext(shard, cancellationToken).ConfigureAwait(false);
+        var dbContext = await DbHub.CreateOperationDbContext(shard, cancellationToken).ConfigureAwait(false);
         await using var _ = dbContext.ConfigureAwait(false);
         dbContext.EnableChangeTracking(false); // Just to speed up things a bit
 
         var keys = items.Select(i => i.Key).ToList();
         var dbKeyValues = await dbContext.Set<TDbKeyValue>().AsQueryable()
-#pragma warning disable MA0002
-            .Where(e => keys.Contains(e.Key))
-#pragma warning restore MA0002
+            .Where(e => keys.Any(k => k.Equals(e.Key)))
             .ToDictionaryAsync(e => e.Key, cancellationToken)
             .ConfigureAwait(false);
         foreach (var item in items) {
@@ -61,14 +62,12 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
             return;
         }
 
-        var dbContext = await DbHub.CreateCommandDbContext(shard, cancellationToken).ConfigureAwait(false);
+        var dbContext = await DbHub.CreateOperationDbContext(shard, cancellationToken).ConfigureAwait(false);
         await using var _ = dbContext.ConfigureAwait(false);
         dbContext.EnableChangeTracking(false); // Just to speed up things a bit
 
         var dbKeyValues = await dbContext.Set<TDbKeyValue>().AsQueryable()
-#pragma warning disable MA0002
-            .Where(e => keys.Contains(e.Key))
-#pragma warning restore MA0002
+            .Where(e => keys.Any(k => k.Equals(e.Key)))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         foreach (var dbKeyValue in dbKeyValues)
@@ -78,7 +77,7 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
 
     // Queries
 
-    public virtual async Task<string?> Get(DbShard shard, string key, CancellationToken cancellationToken = default)
+    public virtual async Task<string?> Get(string shard, string key, CancellationToken cancellationToken = default)
     {
         _ = PseudoGet(shard, key);
 
@@ -92,7 +91,7 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
         return dbKeyValue?.Value;
     }
 
-    public virtual async Task<int> Count(DbShard shard, string prefix, CancellationToken cancellationToken = default)
+    public virtual async Task<int> Count(string shard, string prefix, CancellationToken cancellationToken = default)
     {
         _ = PseudoGet(shard, prefix);
 
@@ -106,7 +105,7 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
     }
 
     public virtual async Task<string[]> ListKeySuffixes(
-        DbShard shard,
+        string shard,
         string prefix,
         PageRef<string> pageRef,
         SortDirection sortDirection = SortDirection.Ascending,
@@ -129,9 +128,8 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
                 : query.Where(e => string.Compare(e.Key, after) < 0);
         */
         var result = await query
-            .Select(e => e.Key)
             .Take(pageRef.Count)
-            .Select(k => k.Substring(prefix.Length))
+            .Select(e => e.Key.Substring(prefix.Length))
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
         return result;
     }
@@ -139,10 +137,10 @@ public class DbKeyValueStore<TDbContext, TDbKeyValue>(IServiceProvider services)
     // Protected methods
 
     [ComputeMethod]
-    protected virtual Task<Unit> PseudoGet(DbShard shard, string keyPart)
+    protected virtual Task<Unit> PseudoGet(string shard, string keyPart)
         => TaskExt.UnitTask;
 
-    protected void PseudoGetAllPrefixes(DbShard shard, string key)
+    protected void PseudoGetAllPrefixes(string shard, string key)
     {
         var delimiter = KeyValueStoreExt.Delimiter;
         var delimiterIndex = key.IndexOf(delimiter, 0);

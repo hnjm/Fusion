@@ -1,18 +1,20 @@
+using System.Diagnostics.CodeAnalysis;
+using ActualLab.OS;
+
 namespace ActualLab.Fusion.UI;
 
 public class UICommander(IServiceProvider services) : IHasServices
 {
     private static readonly ConcurrentDictionary<Type, Func<UICommander, ICommand, CancellationToken, UIAction>>
-        CreateUIActionInvokers = new();
+        CreateUIActionInvokers = new(HardwareInfo.ProcessorCountPo2, 131);
     private static readonly MethodInfo CreateUIActionTypedMethod = typeof(UICommander)
         .GetMethod(nameof(CreateUIActionTyped), BindingFlags.Static | BindingFlags.NonPublic)!;
 
-    private ICommander? _commander;
-    private UIActionTracker? _uiActionTracker;
-
     public IServiceProvider Services { get; } = services;
-    public ICommander Commander => _commander ??= Services.Commander();
-    public UIActionTracker UIActionTracker => _uiActionTracker ??= Services.GetRequiredService<UIActionTracker>();
+    [field: AllowNull, MaybeNull]
+    public ICommander Commander => field ??= Services.Commander();
+    [field: AllowNull, MaybeNull]
+    public UIActionTracker UIActionTracker => field ??= Services.GetRequiredService<UIActionTracker>();
     public MomentClock Clock => UIActionTracker.Clock;
 
     public async Task<TResult> Call<TResult>(ICommand<TResult> command, CancellationToken cancellationToken = default)
@@ -24,7 +26,7 @@ public class UICommander(IServiceProvider services) : IHasServices
     public async Task<object?> Call(ICommand command, CancellationToken cancellationToken = default)
     {
         var result = await Run(command, cancellationToken).ConfigureAwait(false);
-        return result.UntypedValue;
+        return result.Value;
     }
 
     public Task<UIActionResult<TResult>> Run<TResult>(ICommand<TResult> command, CancellationToken cancellationToken = default)
@@ -68,6 +70,8 @@ public class UICommander(IServiceProvider services) : IHasServices
 
     // Private methods
 
+    [UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume CreateUIActionTyped method is preserved")]
+    [UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume CreateUIActionTyped method is preserved")]
     private static UIAction CreateUIAction(UICommander uiCommander, ICommand command, CancellationToken cancellationToken)
         => CreateUIActionInvokers.GetOrAdd(
             command.GetResultType(),

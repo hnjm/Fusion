@@ -5,10 +5,10 @@ namespace ActualLab.CommandR.Configuration;
 
 public interface IMethodCommandHandler : ICommandHandler
 {
-    Type ServiceType { get; }
-    MethodInfo Method { get; }
-    ParameterInfo[] Parameters { get; }
-    Type[] ParameterTypes { get; }
+    public Type ServiceType { get; }
+    public MethodInfo Method { get; }
+    public ParameterInfo[] Parameters { get; }
+    public Type[] ParameterTypes { get; }
 }
 
 public sealed record MethodCommandHandler<
@@ -19,11 +19,10 @@ public sealed record MethodCommandHandler<
         IMethodCommandHandler
     where TCommand : class, ICommand
 {
-    private ParameterInfo[]? _parameters;
-    private Type[]? _parameterTypes;
-
-    public ParameterInfo[] Parameters => _parameters ??= Method.GetParameters();
-    public Type[] ParameterTypes => _parameterTypes ??= Parameters.Select(p => p.ParameterType).ToArray();
+    [field: AllowNull, MaybeNull]
+    public ParameterInfo[] Parameters => field ??= Method.GetParameters();
+    [field: AllowNull, MaybeNull]
+    public Type[] ParameterTypes => field ??= Parameters.Select(p => p.ParameterType).ToArray();
 
     public override Type GetHandlerServiceType()
         => ServiceType;
@@ -73,18 +72,22 @@ public sealed record MethodCommandHandler<
     }
 }
 
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume all command handling code is preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume all command handling code is preserved")]
 public static class MethodCommandHandler
 {
     private static readonly MethodInfo CreateMethod =
         typeof(MethodCommandHandler)
             .GetMethod(nameof(Create), BindingFlags.Static | BindingFlags.NonPublic)!;
 
-    [RequiresUnreferencedCode(UnreferencedCode.Commander)]
-    public static CommandHandler New(Type serviceType, MethodInfo method, double? priorityOverride = null)
+    public static CommandHandler New(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
+        MethodInfo method, double? priorityOverride = null)
         => TryNew(serviceType, method, priorityOverride)
             ?? throw Errors.InvalidCommandHandlerMethod(method);
 
-    [RequiresUnreferencedCode(UnreferencedCode.Commander)]
     public static CommandHandler? TryNew(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type serviceType,
         MethodInfo method,
@@ -129,11 +132,8 @@ public static class MethodCommandHandler
             .Invoke(null, [serviceType, method, isFilter, order])!;
     }
 
-    [RequiresUnreferencedCode(ActualLab.Internal.UnreferencedCode.Reflection)]
     public static CommandHandlerAttribute? GetAttribute(MethodInfo method)
-#pragma warning disable IL2026
         => method.GetAttribute<CommandHandlerAttribute>(true, true);
-#pragma warning restore IL2026
 
     private static MethodCommandHandler<TCommand> Create<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TCommand>(

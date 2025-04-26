@@ -4,6 +4,8 @@ using ActualLab.IO;
 using ActualLab.Rpc;
 using ActualLab.Rpc.Server;
 using MemoryPack;
+using MessagePack;
+using Microsoft.AspNetCore.Builder;
 using static System.Console;
 
 #pragma warning disable ASP0000
@@ -74,27 +76,27 @@ async Task RunClient()
             foreach (var message in messages)
                 WriteLine($"- {message}");
         }
-    };
+    }
 
     async Task ObserveWordCount() {
         var cMessageCount = await Computed.Capture(() => chat.GetWordCount());
         await foreach (var (wordCount, _) in cMessageCount.Changes())
             WriteLine($"Word count changed: {wordCount}");
-    };
+    }
 }
 
 public interface IChat : IComputeService
 {
     [ComputeMethod]
-    Task<List<string>> GetRecentMessages(CancellationToken cancellationToken = default);
+    public Task<List<string>> GetRecentMessages(CancellationToken cancellationToken = default);
     [ComputeMethod]
-    Task<int> GetWordCount(CancellationToken cancellationToken = default);
+    public Task<int> GetWordCount(CancellationToken cancellationToken = default);
 
     [CommandHandler]
-    Task Post(Chat_Post command, CancellationToken cancellationToken);
+    public Task Post(Chat_Post command, CancellationToken cancellationToken);
 }
 
-[DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+[DataContract, MemoryPackable(GenerateType.VersionTolerant), MessagePackObject(true)]
 // ReSharper disable once InconsistentNaming
 public sealed partial record Chat_Post(
     [property: DataMember, MemoryPackOrder(0)] string Message
@@ -102,6 +104,7 @@ public sealed partial record Chat_Post(
 
 public class Chat : IChat
 {
+    // ReSharper disable once ChangeFieldTypeToSystemThreadingLock
     private readonly object _lock = new();
     private List<string> _posts = new();
 

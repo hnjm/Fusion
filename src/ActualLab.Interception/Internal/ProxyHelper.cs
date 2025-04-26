@@ -7,6 +7,7 @@ public static class ProxyHelper
     private static readonly BindingFlags GetMethodInfoBindingFlags =
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "False positive")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MethodInfo GetMethodInfo(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type type,
@@ -18,9 +19,7 @@ public static class ProxyHelper
 
         if (type.IsInterface) {
             foreach (var tInterface in type.GetAllBaseTypes(false, true)) {
-#pragma warning disable IL2072
                 result = GetMethodInfoImpl(tInterface, name, argumentTypes);
-#pragma warning restore IL2072
                 if (result != null)
                     return result;
             }

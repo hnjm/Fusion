@@ -4,6 +4,10 @@ using ActualLab.Interception.Internal;
 
 namespace ActualLab.Interception.Interceptors;
 
+[UnconditionalSuppressMessage("Trimming", "IL2060", Justification = "We assume TypeViewInterceptor's methods are preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "We assume TypeViewInterceptor's methods are preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "We assume TypeViewInterceptor's methods are preserved")]
+[UnconditionalSuppressMessage("Trimming", "IL3050", Justification = "We assume proxy-related code is preserved")]
 public class TypeViewInterceptor : Interceptor
 {
     public new record Options : Interceptor.Options
@@ -14,6 +18,10 @@ public class TypeViewInterceptor : Interceptor
     private readonly MethodInfo _createConvertingHandlerMethod;
     private readonly MethodInfo _createTaskConvertingHandlerMethod;
     private readonly MethodInfo _createValueTaskConvertingHandlerMethod;
+
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(TypeViewInterceptor))]
+    static TypeViewInterceptor()
+    { }
 
     public TypeViewInterceptor(Options settings, IServiceProvider services)
         : base(settings, services)
@@ -32,7 +40,7 @@ public class TypeViewInterceptor : Interceptor
             .Single(m => string.Equals(m.Name, nameof(CreateValueTaskConvertingHandler), StringComparison.Ordinal));
     }
 
-    protected internal override Func<Invocation, object?>? CreateHandler<
+    protected internal override Func<Invocation, object?>? CreateTypedHandler<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] TUnwrapped>(
         Invocation initialInvocation, MethodDef methodDef)
     {
@@ -130,7 +138,7 @@ public class TypeViewInterceptor : Interceptor
             var untypedResult = mTarget.Invoke(target, invocation.Arguments.ToArray());
             var result = (Task<TTarget>) untypedResult!;
             return result.ContinueWith(
-                t => converter.Convert(t.Result),
+                t => converter.Convert(t.GetAwaiter().GetResult()),
                 CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         };
     }
@@ -146,14 +154,13 @@ public class TypeViewInterceptor : Interceptor
         return invocation => {
             var target = invocation.InterfaceProxyTarget;
             var untypedResult = mTarget.Invoke(target, invocation.Arguments.ToArray());
-            var result = (ValueTask<TTarget>) untypedResult!;
+            var result = (ValueTask<TTarget>)untypedResult!;
             // ReSharper disable once HeapView.BoxingAllocation
-            return result
-                .AsTask()
-                .ContinueWith(
-                    t => converter.Convert(t.Result),
-                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default)
-                .ToValueTask();
+            var resultTask = result.AsTask();
+            return resultTask.ContinueWith(
+                t => converter.Convert(t.GetAwaiter().GetResult()),
+                CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default
+                ).ToValueTask();
         };
     }
 }

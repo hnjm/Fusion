@@ -1,6 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
 using ActualLab.Rpc.Internal;
-using UnreferencedCode = ActualLab.Internal.UnreferencedCode;
 
 namespace ActualLab.Rpc.Infrastructure;
 
@@ -12,17 +10,15 @@ public enum RpcObjectKind
 
 public interface IRpcObject : IHasId<RpcObjectId>
 {
-    RpcObjectKind Kind { get; }
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    Task Reconnect(CancellationToken cancellationToken);
-    [RequiresUnreferencedCode(UnreferencedCode.Serialization)]
-    void Disconnect();
+    public RpcObjectKind Kind { get; }
+    public Task Reconnect(CancellationToken cancellationToken);
+    public void Disconnect();
 }
 
 public interface IRpcSharedObject : IRpcObject
 {
-    CpuTimestamp LastKeepAliveAt { get; }
-    void KeepAlive();
+    public CpuTimestamp LastKeepAliveAt { get; }
+    public void KeepAlive();
 }
 
 public static class RpcObjectExt

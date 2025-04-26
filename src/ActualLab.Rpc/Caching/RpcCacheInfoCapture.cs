@@ -48,12 +48,12 @@ public sealed class RpcCacheInfoCapture
 
     public void CaptureKey(RpcOutboundContext context, RpcMessage? message)
         => Key ??= message is { Arguments: null } // This indicates ArgumentData is there
-            ? new RpcCacheKey(context.MethodDef!.Service.Name, context.MethodDef.Name, message.ArgumentData)
+            ? new RpcCacheKey(context.MethodDef!.FullName, message.ArgumentData)
             : null;
 
     public void CaptureValue(RpcMessage message)
     {
-        var hash = message.Headers.TryGet(RpcHeaderNames.Hash) ?? "";
+        var hash = message.Headers.TryGet(WellKnownRpcHeaders.Hash) ?? "";
         ValueSource?.TrySetResult(new RpcCacheValue(message.ArgumentData, hash));
     }
 

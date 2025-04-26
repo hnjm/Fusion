@@ -3,7 +3,7 @@ namespace ActualLab.Fusion.Operations;
 
 public interface IOperationCompletionNotifier
 {
-    Task<bool> NotifyCompleted(Operation operation, CommandContext? commandContext);
+    public Task<bool> NotifyCompleted(Operation operation, CommandContext? commandContext);
 }
 
 public class OperationCompletionNotifier : IOperationCompletionNotifier
@@ -21,7 +21,7 @@ public class OperationCompletionNotifier : IOperationCompletionNotifier
     protected IServiceProvider Services { get; }
     protected HostId HostId { get; }
     protected IOperationCompletionListener[] OperationCompletionListeners { get; }
-    protected RecentlySeenMap<Symbol, Unit> RecentlySeenUuids { get; }
+    protected RecentlySeenMap<string, Unit> RecentlySeenUuids { get; }
     protected object Lock => RecentlySeenUuids;
     protected MomentClock Clock { get; }
     protected ILogger Log { get; }
@@ -35,14 +35,16 @@ public class OperationCompletionNotifier : IOperationCompletionNotifier
 
         HostId = Services.GetRequiredService<HostId>();
         OperationCompletionListeners = Services.GetServices<IOperationCompletionListener>().ToArray();
-        RecentlySeenUuids = new RecentlySeenMap<Symbol, Unit>(
+        RecentlySeenUuids = new RecentlySeenMap<string, Unit>(
             Settings.MaxKnownOperationCount,
             Settings.MaxKnownOperationAge,
-            Clock);
+            Clock,
+            StringComparer.Ordinal);
     }
 
     public Task<bool> NotifyCompleted(Operation operation, CommandContext? commandContext)
     {
+#pragma warning disable MA0100
         lock (Lock) {
             if (!RecentlySeenUuids.TryAdd(operation.Uuid, operation.LoggedAt))
                 return TaskExt.FalseTask;
@@ -51,7 +53,7 @@ public class OperationCompletionNotifier : IOperationCompletionNotifier
         using var _ = ExecutionContextExt.TrySuppressFlow();
         return Task.Run(async () => {
             var isLocal = commandContext != null;
-            var isFromLocalAgent = string.Equals(operation.HostId, HostId.Id.Value, StringComparison.Ordinal);
+            var isFromLocalAgent = string.Equals(operation.HostId, HostId.Id, StringComparison.Ordinal);
             // An important assertion
             if (isLocal != isFromLocalAgent) {
                 var message = isFromLocalAgent
@@ -83,5 +85,6 @@ public class OperationCompletionNotifier : IOperationCompletionNotifier
             }
             return true;
         });
+#pragma warning restore MA0100
     }
 }

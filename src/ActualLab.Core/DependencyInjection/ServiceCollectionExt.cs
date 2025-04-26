@@ -60,6 +60,33 @@ public static class ServiceCollectionExt
         return services;
     }
 
+    // AddScopedOrSingleton
+
+    public static IServiceCollection AddScopedOrSingleton<TService>(
+        this IServiceCollection services,
+        Func<IServiceProvider, TService> factory)
+        where TService : class
+    {
+        services.AddScoped(c => {
+            var lazy = new LazySlim<TService>(() => factory.Invoke(c));
+            return new ScopedOrSingleton<LazySlim<TService>>.Scoped(c, lazy);
+        });
+        services.AddSingleton(c => {
+            var lazy = new LazySlim<TService>(() => factory.Invoke(c));
+            return new ScopedOrSingleton<LazySlim<TService>>.Singleton(c, lazy);
+        });
+        services.AddTransient<TService>(c => {
+            // Singleton is always available, so we start from it
+            var singleton = c.GetRequiredService<ScopedOrSingleton<LazySlim<TService>>.Singleton>();
+            if (ReferenceEquals(singleton.Services, c))
+                return singleton.Value.Value;
+
+            var scoped = c.GetRequiredService<ScopedOrSingleton<LazySlim<TService>>.Scoped>();
+            return scoped.Value.Value;
+        });
+        return services;
+    }
+
     // AddAlias
 
     public static IServiceCollection AddAlias<TAlias, TService>(

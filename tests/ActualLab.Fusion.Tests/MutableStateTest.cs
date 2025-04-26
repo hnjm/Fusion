@@ -10,11 +10,11 @@ public class MutableStateTest(ITestOutputHelper @out) : SimpleFusionTestBase(@ou
         var factory = CreateServices().StateFactory();
 
         var ms1 = factory.NewMutable<string>("A");
-        ms1.Updated += (s, _) => Out.WriteLine($"ms1 = {s.ValueOrDefault}");
+        ms1.Updated += (s, _) => Out.WriteLine($"ms1 = {((IState<string>)s).ValueOrDefault}");
         ms1.Value.Should().Be("A");
 
         var ms2 = factory.NewMutable<string>("B");
-        ms2.Updated += (s, _)  => Out.WriteLine($"ms2 = {s.ValueOrDefault}");
+        ms2.Updated += (s, _)  => Out.WriteLine($"ms2 = {((IState<string>)s).ValueOrDefault}");
         ms2.Value.Should().Be("B");
 
         var cs = factory.NewComputed<string>(
@@ -57,20 +57,23 @@ public class MutableStateTest(ITestOutputHelper @out) : SimpleFusionTestBase(@ou
 
         var s = factory.NewMutable<object?>();
         s.Value.Should().Be(null);
-        var c0 = (await s.Update()).Computed;
+        await s.Update();
+        var c0 = s.Computed;
         Out.WriteLine($"Computed: {c0}");
         c0.Value.Should().Be(null);
 
         s.Value = o1;
         s.Value.Should().Be(o1);
-        var c1 = (await s.Update()).Computed;
+        await s.Update();
+        var c1 = s.Computed;
         Out.WriteLine($"Computed: {c1}");
         c1.Value.Should().Be(o1);
         c1.Should().NotBe(c0);
 
         s.Value = o2;
         s.Value.Should().Be(o2);
-        var c2 = (await s.Update()).Computed;
+        await s.Update();
+        var c2 = s.Computed;
         Out.WriteLine($"Computed: {c2}");
         c2.Value.Should().Be(o2);
         c2.Should().NotBe(c1);
@@ -111,5 +114,31 @@ public class MutableStateTest(ITestOutputHelper @out) : SimpleFusionTestBase(@ou
         bComputed.IsConsistent().Should().BeTrue();
 
         stopCts.Cancel();
+    }
+
+    [Fact]
+    public async Task InitialOutputTest()
+    {
+        var services = CreateServices();
+        var stateFactory = services.StateFactory();
+
+        var s0 = new MutableState<int>(new MutableState<int>.Options(), services);
+        s0.Value.Should().Be(0);
+        (await s0.Use()).Should().Be(0);
+
+        var s1 = new MutableState<string>(new MutableState<string>.Options(), services);
+        s1.Value.Should().Be(null);
+        (await s1.Use()).Should().Be(null);
+
+        using var s2 = stateFactory.NewComputed(async ct => {
+            await Task.Delay(100, ct);
+            return 1;
+        });
+        s2.Value.Should().Be(0);
+        (await s2.Use()).Should().Be(1);
+
+        var s3 = stateFactory.NewMutable((bool?)null);
+        s3.Value.Should().Be(null);
+        (await s3.Use()).Should().Be(null);
     }
 }

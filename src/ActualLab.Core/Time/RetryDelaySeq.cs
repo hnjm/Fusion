@@ -1,6 +1,13 @@
+using MessagePack;
+
 namespace ActualLab.Time;
 
 [DataContract, MemoryPackable(GenerateType.VersionTolerant)]
+#if NET8_0_OR_GREATER
+[MessagePackObject(true, SuppressSourceGeneration = true)]
+#else
+[MessagePackObject(true)]
+#endif
 public partial record RetryDelaySeq(
     [property: DataMember, MemoryPackOrder(0)] TimeSpan Min,
     [property: DataMember, MemoryPackOrder(1)] TimeSpan Max,
@@ -27,7 +34,7 @@ public partial record RetryDelaySeq(
         get => GetDelay(failureCount);
     }
 
-    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor]
+    [JsonConstructor, Newtonsoft.Json.JsonConstructor, MemoryPackConstructor, SerializationConstructor]
     public RetryDelaySeq(
         TimeSpan min, TimeSpan max,
         double spread = DefaultSpread,
